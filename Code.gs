@@ -172,7 +172,7 @@ function handleApiRequest(action, payload) {
         break;
 
       case 'updateAppConfig':
-        result = updateAppConfig(args[0] || payload.configData);
+        result = updateAppConfig(args[0] || payload.configData, args[1] || payload.authToken);
         break;
 
       case 'addNewStudent':
@@ -200,11 +200,11 @@ function handleApiRequest(action, payload) {
         break;
 
       case 'promoteBatch':
-        result = promoteBatch(args[0] || payload.payload || payload);
+        result = promoteBatch(args[0] || payload.payload || payload, args[1] || payload.authToken);
         break;
 
       case 'clearClassAttendanceData':
-        result = clearClassAttendanceData(args[0] || payload.classId, args[1] || payload.purgeMode);
+        result = clearClassAttendanceData(args[0] || payload.classId, args[1] || payload.purgeMode, args[2] || payload.authToken);
         break;
 
       case 'ping':

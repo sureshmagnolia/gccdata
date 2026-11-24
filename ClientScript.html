@@ -2580,7 +2580,7 @@
           <label class="promote-student-item flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition text-xs border border-transparent hover:border-slate-200 gap-2 w-full overflow-hidden">
             <div class="flex items-center space-x-2 min-w-0 flex-1">
               <input type="checkbox" class="promote-student-checkbox w-4 h-4 rounded text-blue-600 focus:ring-blue-500 flex-shrink-0"
-                value="${studentKey}" checked onchange="app.updatePromotionSelectedCount()">
+                value="${studentId}" checked onchange="app.updatePromotionSelectedCount()">
               <span class="font-mono font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px] flex-shrink-0">${s.regNo}</span>
               <span class="text-slate-800 font-medium truncate">${s.name}</span>
             </div>
@@ -2685,8 +2685,9 @@
           sourceClassId,
           targetClassName,
           studentIds,
-          archiveSourceClass
-        });
+          archiveSourceClass,
+          authToken: this.getAuthToken()
+        }, this.getAuthToken());
     },
 
     /* ==========================================================
@@ -3099,6 +3100,17 @@
      * Initializes Google Identity Services (GIS) for 1-click Google Sign-In.
      */
     initGoogleSignIn() {
+      // In Google Apps Script, the app runs inside a sandboxed iframe (*.googleusercontent.com)
+      // where Google Accounts are handled natively by Apps Script container auth.
+      // Google Identity Services (GSI) button is only for external hosting (GitHub Pages / Vercel).
+      const isGasHost = window.location.hostname.includes('googleusercontent.com') || window.location.hostname.includes('script.google.com');
+      const googleSection = document.getElementById('google-signin-section');
+      if (isGasHost) {
+        if (googleSection) googleSection.classList.add('hidden');
+        return;
+      }
+      if (googleSection) googleSection.classList.remove('hidden');
+
       const clientId = "886464904597-pdp0mhb3kcb3dnt0pn7sosupgfc3frch.apps.googleusercontent.com";
       
       const checkGis = () => {

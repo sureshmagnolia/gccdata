@@ -2238,8 +2238,8 @@ function escapeGasHtml(str) {
  * @param {Object} configData { minAttendance, collegeName, portalTitle }
  * @returns {Object} { success: boolean, message: string, config: Object }
  */
-function updateAppConfig(configData) {
-  requireAdmin();
+function updateAppConfig(configData, authToken) {
+  requireAdmin(authToken || (configData && configData.authToken));
   const ss = getSpreadsheet();
   let configSheet = ss.getSheetByName(SHEET_CONFIG);
   if (!configSheet) {
@@ -2290,8 +2290,8 @@ function updateAppConfig(configData) {
  * @param {Object} payload { sourceClassId, targetClassName, studentIds, archiveSourceClass }
  * @returns {Object} { success: boolean, message: string }
  */
-function promoteBatch(payload) {
-  requireAdmin();
+function promoteBatch(payload, authToken) {
+  requireAdmin(authToken || (payload && payload.authToken));
   const sourceClassId = (payload.sourceClassId || '').trim();
   const targetClassName = (payload.targetClassName || '').trim();
   const studentIds = payload.studentIds || [];
@@ -2422,8 +2422,8 @@ function promoteBatch(payload) {
  * @param {string} purgeMode ('attendance_only' | 'class_and_attendance')
  * @returns {Object} { success: boolean, message: string }
  */
-function clearClassAttendanceData(classId, purgeMode) {
-  requireAdmin();
+function clearClassAttendanceData(classId, purgeMode, authToken) {
+  requireAdmin(authToken);
   classId = (classId || '').trim();
   if (!classId) return { success: false, message: "Class ID is required." };
 
