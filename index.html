@@ -12,6 +12,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- SheetJS for client-side Excel parsing & exporting -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Google Identity Services for 1-Click Google Sign-In -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <!-- Complete Self-Contained Mobile & Desktop Styles -->
   <style>
@@ -300,6 +302,26 @@
     <!-- High Prominence Call-out Box -->
     <div id="denied-message-box" class="text-left mb-6 space-y-3">
       <!-- Injected dynamically in ClientScript.html -->
+    </div>
+
+    <!-- ================= GOOGLE 1-CLICK SIGN IN CARD ================= -->
+    <div id="google-signin-section" class="mt-4 pt-4 border-t-2 border-dashed border-slate-200 text-center">
+      <div class="flex items-center justify-center gap-2 mb-1.5">
+        <svg class="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <h3 class="text-sm sm:text-base font-bold text-slate-900">Sign In with Google</h3>
+      </div>
+      <p class="text-xs text-slate-600 mb-3">
+        Sign in instantly with your registered department Google account:
+      </p>
+
+      <div class="flex justify-center mb-1 min-h-[44px]">
+        <div id="g_id_signin_btn" class="inline-block"></div>
+      </div>
     </div>
 
     <!-- ================= FACULTY EMERGENCY LOGIN / OTP CARD ================= -->
@@ -1597,7 +1619,7 @@
     };
 
     const apiMethods = [
-      'getAppMetadata', 'recordAttendanceSession', 'verifyEmergencyPassword', 'sendLoginOTP',
+      'getAppMetadata', 'recordAttendanceSession', 'verifyGoogleLogin', 'verifyEmergencyPassword', 'sendLoginOTP',
       'verifyLoginOTP', 'getSessionForEditing', 'getAttendanceReport', 'downloadRegisterPdf',
       'syncOfflineSessionsBatch', 'getStudentsByClass', 'getCurrentUserEmail', 'getAuthDiagnostics',
       'syncDrivePermissions', 'getUsersList', 'addUser', 'setUserStatus', 'deleteUser',
@@ -1675,6 +1697,9 @@
       window.addEventListener('online', () => this.handleNetworkStatusChange(true));
       window.addEventListener('offline', () => this.handleNetworkStatusChange(false));
       this.updateOfflineUI();
+
+      // Initialize Google 1-Click Sign-In
+      this.initGoogleSignIn();
 
       // ==========================================================
       // 1-TIME BROWSER AUTHENTICATION: INSTANT BOOT (0ms Startup)
@@ -1961,6 +1986,9 @@
 
       // Automatically run system diagnostics to inspect exact server/session state
       this.runDiagnostics(email);
+
+      // Render Google Sign-In button on the authorization screen
+      this.initGoogleSignIn();
 
       // Update Topbar Profile so it never stays stuck on "Loading... Checking auth..."
       const nameElem = document.getElementById('user-display-name');
@@ -4653,6 +4681,94 @@
         if (token) localStorage.setItem('attendance_auth_token', token);
         else localStorage.removeItem('attendance_auth_token');
       } catch (e) {}
+    },
+
+    /**
+     * Initializes Google Identity Services (GIS) for 1-click Google Sign-In.
+     */
+    initGoogleSignIn() {
+      const clientId = "886464904597-pdp0mhb3kcb3dnt0pn7sosupgfc3frch.apps.googleusercontent.com";
+      
+      const checkGis = () => {
+        if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+          try {
+            google.accounts.id.initialize({
+              client_id: clientId,
+              callback: (response) => this.handleGoogleCredentialResponse(response),
+              auto_select: false,
+              cancel_on_tap_outside: true
+            });
+
+            const btnContainer = document.getElementById('g_id_signin_btn');
+            if (btnContainer) {
+              btnContainer.innerHTML = ''; // prevent duplicate buttons
+              google.accounts.id.renderButton(btnContainer, {
+                theme: "outline",
+                size: "large",
+                type: "standard",
+                shape: "pill",
+                text: "signin_with",
+                logo_alignment: "left",
+                width: 260
+              });
+            }
+          } catch (e) {
+            console.warn("GIS initialization error:", e);
+          }
+        } else {
+          setTimeout(checkGis, 200);
+        }
+      };
+
+      checkGis();
+    },
+
+    /**
+     * Callback when user selects account in Google Identity Services.
+     * @param {Object} response - { credential, select_by }
+     */
+    handleGoogleCredentialResponse(response) {
+      if (!response || !response.credential) {
+        this.showToast("Google sign-in was cancelled or failed.", "error");
+        return;
+      }
+
+      try {
+        const token = response.credential;
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        const payload = JSON.parse(jsonPayload);
+        const email = payload.email ? payload.email.toLowerCase().trim() : '';
+
+        if (!email) {
+          this.showToast("Could not retrieve email from Google credential.", "error");
+          return;
+        }
+
+        this.showToast("Authenticating Google account: " + email + "...", "info");
+
+        google.script.run
+          .withSuccessHandler(res => {
+            if (res && res.success) {
+              this.onAuthSuccess(res);
+            } else {
+              this.showUnauthorizedScreen({
+                email: email,
+                message: res ? res.message : "Account not registered in faculty roster."
+              });
+              this.showToast(res ? res.message : "Authorization denied.", "error");
+            }
+          })
+          .withFailureHandler(err => {
+            this.showToast("Error verifying Google account with server: " + err, "error");
+          })
+          .verifyGoogleLogin(email, token);
+
+      } catch (err) {
+        console.error("JWT parse error:", err);
+        this.showToast("Failed to process Google login response: " + err.message, "error");
+      }
     },
 
     verifyEmergencyPassword() {

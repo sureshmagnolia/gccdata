@@ -31,7 +31,7 @@
     };
 
     const apiMethods = [
-      'getAppMetadata', 'recordAttendanceSession', 'verifyEmergencyPassword', 'sendLoginOTP',
+      'getAppMetadata', 'recordAttendanceSession', 'verifyGoogleLogin', 'verifyEmergencyPassword', 'sendLoginOTP',
       'verifyLoginOTP', 'getSessionForEditing', 'getAttendanceReport', 'downloadRegisterPdf',
       'syncOfflineSessionsBatch', 'getStudentsByClass', 'getCurrentUserEmail', 'getAuthDiagnostics',
       'syncDrivePermissions', 'getUsersList', 'addUser', 'setUserStatus', 'deleteUser',
@@ -109,6 +109,9 @@
       window.addEventListener('online', () => this.handleNetworkStatusChange(true));
       window.addEventListener('offline', () => this.handleNetworkStatusChange(false));
       this.updateOfflineUI();
+
+      // Initialize Google 1-Click Sign-In
+      this.initGoogleSignIn();
 
       // ==========================================================
       // 1-TIME BROWSER AUTHENTICATION: INSTANT BOOT (0ms Startup)
@@ -395,6 +398,9 @@
 
       // Automatically run system diagnostics to inspect exact server/session state
       this.runDiagnostics(email);
+
+      // Render Google Sign-In button on the authorization screen
+      this.initGoogleSignIn();
 
       // Update Topbar Profile so it never stays stuck on "Loading... Checking auth..."
       const nameElem = document.getElementById('user-display-name');
@@ -3087,6 +3093,94 @@
         if (token) localStorage.setItem('attendance_auth_token', token);
         else localStorage.removeItem('attendance_auth_token');
       } catch (e) {}
+    },
+
+    /**
+     * Initializes Google Identity Services (GIS) for 1-click Google Sign-In.
+     */
+    initGoogleSignIn() {
+      const clientId = "886464904597-pdp0mhb3kcb3dnt0pn7sosupgfc3frch.apps.googleusercontent.com";
+      
+      const checkGis = () => {
+        if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+          try {
+            google.accounts.id.initialize({
+              client_id: clientId,
+              callback: (response) => this.handleGoogleCredentialResponse(response),
+              auto_select: false,
+              cancel_on_tap_outside: true
+            });
+
+            const btnContainer = document.getElementById('g_id_signin_btn');
+            if (btnContainer) {
+              btnContainer.innerHTML = ''; // prevent duplicate buttons
+              google.accounts.id.renderButton(btnContainer, {
+                theme: "outline",
+                size: "large",
+                type: "standard",
+                shape: "pill",
+                text: "signin_with",
+                logo_alignment: "left",
+                width: 260
+              });
+            }
+          } catch (e) {
+            console.warn("GIS initialization error:", e);
+          }
+        } else {
+          setTimeout(checkGis, 200);
+        }
+      };
+
+      checkGis();
+    },
+
+    /**
+     * Callback when user selects account in Google Identity Services.
+     * @param {Object} response - { credential, select_by }
+     */
+    handleGoogleCredentialResponse(response) {
+      if (!response || !response.credential) {
+        this.showToast("Google sign-in was cancelled or failed.", "error");
+        return;
+      }
+
+      try {
+        const token = response.credential;
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        const payload = JSON.parse(jsonPayload);
+        const email = payload.email ? payload.email.toLowerCase().trim() : '';
+
+        if (!email) {
+          this.showToast("Could not retrieve email from Google credential.", "error");
+          return;
+        }
+
+        this.showToast("Authenticating Google account: " + email + "...", "info");
+
+        google.script.run
+          .withSuccessHandler(res => {
+            if (res && res.success) {
+              this.onAuthSuccess(res);
+            } else {
+              this.showUnauthorizedScreen({
+                email: email,
+                message: res ? res.message : "Account not registered in faculty roster."
+              });
+              this.showToast(res ? res.message : "Authorization denied.", "error");
+            }
+          })
+          .withFailureHandler(err => {
+            this.showToast("Error verifying Google account with server: " + err, "error");
+          })
+          .verifyGoogleLogin(email, token);
+
+      } catch (err) {
+        console.error("JWT parse error:", err);
+        this.showToast("Failed to process Google login response: " + err.message, "error");
+      }
     },
 
     verifyEmergencyPassword() {

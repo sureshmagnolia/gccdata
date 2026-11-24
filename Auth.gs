@@ -716,6 +716,51 @@ function verifyEmergencyPassword(email, inputPassword) {
 }
 
 /**
+ * Verifies a Google Identity Services (GIS) login from external web frontends.
+ * Confirms user email is registered in faculty roster, and issues a signed HMAC authToken.
+ * @param {string} email
+ * @param {string} [googleIdToken]
+ * @returns {Object}
+ */
+function verifyGoogleLogin(email, googleIdToken) {
+  const clean = cleanEmail(email);
+  if (!clean || !clean.includes('@')) {
+    return { success: false, message: "Invalid email address received from Google." };
+  }
+
+  const user = findUserByEmail(clean);
+  if (!user) {
+    return {
+      success: false,
+      message: `The Google account "${clean}" is not found in the registered faculty list. Please contact the Department Administrator to add your account.`
+    };
+  }
+
+  if (!user.isActive) {
+    return {
+      success: false,
+      message: `Account for "${clean}" is marked as Inactive. Please contact the Department Administrator / HOD.`
+    };
+  }
+
+  const authToken = generateUserToken(clean);
+  const metadata = getAppMetadata(authToken);
+
+  return {
+    success: true,
+    user: {
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isAuthorized: true
+    },
+    authToken: authToken,
+    metadata: metadata,
+    message: `Welcome, ${user.name}! Signed in successfully with Google.`
+  };
+}
+
+/**
  * Checks if current user is an Admin. Throws error if not.
  * @param {string} [authToken]
  * @returns {string} current admin email

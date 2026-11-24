@@ -107,6 +107,10 @@ function handleApiRequest(action, payload) {
         result = recordAttendanceSession(args[0] || payload.payload || payload);
         break;
 
+      case 'verifyGoogleLogin':
+        result = verifyGoogleLogin(args[0] || payload.email, args[1] || payload.googleIdToken);
+        break;
+
       case 'verifyEmergencyPassword':
         result = verifyEmergencyPassword(args[0] || payload.email, args[1] || payload.password);
         break;
