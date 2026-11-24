@@ -3357,9 +3357,6 @@
     },
 
     runDiagnostics(preferredEmail) {
-      const output = document.getElementById('debug-log-output');
-      if (output) output.textContent = "Connecting to server diagnostics... Inspecting session & Google Drive...";
-
       const emailInput = document.getElementById('emergency-email-input');
       const email = preferredEmail || (emailInput ? emailInput.value.trim() : '');
 
@@ -3373,40 +3370,30 @@
         email: email
       };
 
+      console.info("🔍 System Diagnostics Client Info:", clientInfo);
+
       if (typeof google === 'undefined' || !google.script || !google.script.run) {
-        if (output) output.textContent = JSON.stringify({ error: "Google Apps Script client API not available in this browser window.", clientInfo: clientInfo }, null, 2);
+        console.warn("⚠️ Google Apps Script client API not available in this window.");
         return;
       }
 
       google.script.run
         .withSuccessHandler(diag => {
           this.lastDiagnostics = diag;
-          if (output) {
-            output.textContent = JSON.stringify(diag, null, 2);
-          }
+          console.group("🛠️ [SYSTEM DIAGNOSTICS & SESSION INSPECTOR]");
+          console.log("Timestamp:", diag.timestamp);
+          console.log("Session:", diag.session);
+          console.log("Spreadsheet:", diag.spreadsheet);
+          console.log("Users Sheet:", diag.usersSheet);
+          console.log("Cache:", diag.cache);
+          console.log("Resolution:", diag.resolution);
+          console.log("Full Report:", diag);
+          console.groupEnd();
         })
         .withFailureHandler(err => {
-          if (output) {
-            output.textContent = JSON.stringify({ error: "Server diagnostics failed: " + err.toString(), clientInfo: clientInfo }, null, 2);
-          }
+          console.error("❌ System diagnostics failed:", err);
         })
         .getAuthDiagnostics(clientInfo);
-    },
-
-    copyDiagnosticLog() {
-      const output = document.getElementById('debug-log-output');
-      const text = output ? output.textContent : '';
-      if (text) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(() => {
-            this.showToast("Diagnostic report copied to clipboard! Paste it to Admin.", "success");
-          }).catch(() => {
-            this.showToast("Select and copy the text in the black box.", "info");
-          });
-        } else {
-          this.showToast("Select and copy the text in the black box.", "info");
-        }
-      }
     },
 
     clearCacheAndReload() {
