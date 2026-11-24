@@ -1,0 +1,8 @@
+# Ignore non-Apps Script assets
+*.xlsx
+*.csv
+*.md
+.git/**
+check_dom.js
+index.html
+vercel.json

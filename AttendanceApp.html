@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Attendance App</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS for client-side Excel parsing & exporting -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Complete Self-Contained Mobile & Desktop Styles -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+
+    html {
+      overflow-y: auto;
+      overflow-x: hidden;
+      width: 100%;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f8fafc;
+      padding-bottom: env(safe-area-inset-bottom);
+      overflow-x: hidden;
+      min-height: 100vh;
+      width: 100%;
+      margin: 0;
+    }
+
+    /* Tactile Mobile Button Feedback */
+    button:active,
+    .btn-touch:active {
+      transform: scale(0.96);
+      transition: transform 0.08s ease-in-out;
+    }
+
+    /* Large Touch Status Buttons */
+    .status-btn {
+      min-width: 42px;
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.825rem;
+      font-weight: 700;
+      transition: all 0.15s ease-in-out;
+      touch-action: manipulation;
+    }
+
+    .status-P-active {
+      background-color: #10b981 !important;
+      color: #ffffff !important;
+      border-color: #059669 !important;
+      box-shadow: 0 1px 3px rgba(16, 185, 129, 0.4);
+    }
+
+    .status-A-active {
+      background-color: #ef4444 !important;
+      color: #ffffff !important;
+      border-color: #dc2626 !important;
+      box-shadow: 0 1px 3px rgba(239, 68, 68, 0.4);
+    }
+
+    .status-L-active {
+      background-color: #f59e0b !important;
+      color: #ffffff !important;
+      border-color: #d97706 !important;
+      box-shadow: 0 1px 3px rgba(245, 158, 11, 0.4);
+    }
+
+    /* Active Nav Tab */
+    .nav-tab-active {
+      border-bottom: 3px solid #2563eb;
+      color: #1d4ed8;
+      font-weight: 700;
+      background-color: #eff6ff;
+    }
+
+    /* Hide scrollbars for clean horizontal swipe on mobile */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Sticky Bottom Action Bar with Blur */
+    .sticky-action-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 25;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid #e2e8f0;
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+
+    /* Print Formatting */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+
+      body.printing-matrix #printable-matrix-area,
+      body.printing-matrix #printable-matrix-area * {
+        visibility: visible !important;
+      }
+
+      body:not(.printing-matrix) #printable-area,
+      body:not(.printing-matrix) #printable-area * {
+        visibility: visible !important;
+      }
+
+      #printable-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        display: block !important;
+      }
+
+      #printable-matrix-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        display: block !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- ================= TOP HEADER (RESPONSIVE & MOBILE-FIRST) ================= -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm w-full overflow-hidden">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-14 sm:h-16 items-center gap-2">
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-2 min-w-0 flex-1">
+          <div class="bg-blue-600 text-white p-1.5 sm:p-2 rounded-xl shadow-sm flex-shrink-0">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253">
+              </path>
+            </svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <h1 class="text-sm sm:text-lg font-bold text-slate-900 tracking-tight leading-tight truncate"
+              id="college-title">
+              Attendance App</h1>
+            <span id="portal-subtitle"
+              class="text-[10px] sm:text-xs text-slate-500 font-medium truncate block">Department
+              Attendance Management</span>
+          </div>
+        </div>
+
+        <!-- User Profile Pill & Offline Sync Pill -->
+        <div class="flex items-center space-x-2 flex-shrink-0">
+          <!-- Offline Sync Indicator Pill (Dynamic via JS) -->
+          <div id="offline-sync-pill" class="hidden flex items-center space-x-1.5">
+            <button type="button" onclick="app.openOfflineQueueModal()" id="offline-badge-btn"
+              class="px-2.5 py-1 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center space-x-1.5 hover:bg-amber-200 transition shadow-sm">
+              <span class="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+              <span id="offline-queue-count-text">Offline (0)</span>
+            </button>
+            <button type="button" onclick="app.syncOfflineQueue()" id="offline-quick-sync-btn" title="Sync now"
+              class="p-1 text-xs font-bold rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                </path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="text-right hidden sm:block">
+            <div id="user-display-name" class="text-xs sm:text-sm font-semibold text-slate-800 truncate max-w-[150px]">
+              Loading...</div>
+            <div id="user-display-email" class="text-[10px] sm:text-xs text-slate-500 truncate max-w-[150px]">Checking
+              auth...</div>
+          </div>
+          <span id="user-role-badge"
+            class="px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex-shrink-0">
+            ...
+          </span>
+          <button type="button" onclick="app.signOutBrowser()"
+            id="user-signout-btn"
+            class="hidden p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition flex-shrink-0"
+            title="Sign out / Switch user on this browser">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+              </path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile-Scrollable Navigation Tabs -->
+    <div id="nav-bar" class="bg-white border-t border-slate-100 hidden w-full overflow-hidden">
+      <div
+        class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 flex space-x-1 sm:space-x-3 overflow-x-auto no-scrollbar py-1 w-full">
+        <button onclick="app.setTab('mark')" id="tab-mark"
+          class="py-2.5 px-3.5 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 hover:text-blue-600 transition whitespace-nowrap nav-tab-active flex items-center space-x-1.5 flex-shrink-0">
+          <span>📋</span>
+          <span>Mark & Edit</span>
+        </button>
+        <button onclick="app.setTab('edit')" id="tab-edit"
+          class="py-2.5 px-3.5 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 hover:text-blue-600 transition whitespace-nowrap flex items-center space-x-1.5 flex-shrink-0">
+          <span>👥</span>
+          <span>Edit Students</span>
+        </button>
+        <button onclick="app.setTab('report')" id="tab-report"
+          class="py-2.5 px-3.5 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 hover:text-blue-600 transition whitespace-nowrap flex items-center space-x-1.5 flex-shrink-0">
+          <span>📊</span>
+          <span>Reports</span>
+        </button>
+        <button onclick="app.setTab('import')" id="tab-import"
+          class="py-2.5 px-3.5 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 hover:text-blue-600 transition whitespace-nowrap flex items-center space-x-1.5 flex-shrink-0">
+          <span>📥</span>
+          <span>Import Roster</span>
+        </button>
+        <button onclick="app.setTab('promote')" id="tab-promote"
+          class="py-2.5 px-3.5 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 hover:text-blue-600 transition whitespace-nowrap hidden admin-only flex items-center space-x-1.5 flex-shrink-0">
+          <span>🎓</span>
+          <span>Promote</span>
+        </button>
+        <button onclick="app.setTab('users')" id="tab-users"
+          class="py-2.5 px-3.5 text-xs sm:text-sm font-semibold rounded-lg text-slate-600 hover:text-blue-600 transition whitespace-nowrap hidden admin-only flex items-center space-x-1.5 flex-shrink-0">
+          <span>⚙️</span>
+          <span>Admin</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Offline Alert Notification Strip -->
+    <div id="offline-banner" class="hidden bg-amber-500 text-white text-xs font-semibold px-4 py-2 flex items-center justify-between shadow-inner">
+      <div class="flex items-center space-x-2">
+        <span class="text-base">⚡</span>
+        <span id="offline-banner-text">Working Offline. Changes will be saved on this device and synced once connection returns.</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <button onclick="app.syncOfflineQueue()" class="bg-white text-amber-900 px-2.5 py-1 rounded-lg text-[11px] font-bold hover:bg-amber-100 transition shadow-sm">
+          Sync Now
+        </button>
+        <button onclick="app.dismissOfflineBanner()" class="text-white hover:text-amber-200 font-bold px-1 text-sm">✕</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= GLOBAL TOAST NOTIFICATION CONTAINER ================= -->
+  <div id="toast-container"
+    class="fixed top-4 left-1/2 transform -translate-x-1/2 sm:left-auto sm:right-5 sm:translate-x-0 z-50 flex flex-col space-y-2 pointer-events-none w-11/12 sm:w-auto max-w-sm">
+  </div>
+
+  <!-- ================= GLOBAL LOADING SPINNER ================= -->
+  <div id="global-loader" class="flex-1 flex flex-col items-center justify-center p-8">
+    <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mb-4"></div>
+    <p id="loader-message" class="text-slate-600 font-medium text-sm sm:text-base">Authenticating Google Account...</p>
+  </div>
+
+  <!-- ================= ACCESS RESTRICTED / AUTHORIZATION REQUIRED SCREEN ================= -->
+  <div id="access-denied-view"
+    class="hidden max-w-xl mx-auto my-6 sm:my-12 p-5 sm:p-8 bg-white rounded-2xl shadow-xl border-2 border-red-200 text-center mx-3 sm:mx-auto">
+    <div id="denied-icon-container"
+      class="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-3.5 shadow-sm border border-red-200">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
+        </path>
+      </svg>
+    </div>
+    
+    <div class="inline-block px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-red-100 text-red-700 border border-red-200 mb-2">
+      Authorization Required
+    </div>
+    <h2 id="denied-title" class="text-xl sm:text-2xl font-bold text-slate-900 mb-1">
+      Access Restricted
+    </h2>
+    <p id="denied-subtitle" class="text-slate-600 text-xs sm:text-sm mb-5">
+      Signed in as <strong id="denied-user-email" class="text-slate-900 font-mono break-all font-bold">user@example.com</strong>
+    </p>
+
+    <!-- High Prominence Call-out Box -->
+    <div id="denied-message-box" class="text-left mb-6 space-y-3">
+      <!-- Injected dynamically in ClientScript.html -->
+    </div>
+
+    <!-- ================= FACULTY EMERGENCY LOGIN / OTP CARD ================= -->
+    <div id="emergency-login-section" class="mt-4 pt-4 border-t-2 border-dashed border-slate-200 text-left">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="text-lg">🔐</span>
+        <h3 class="text-sm sm:text-base font-bold text-slate-900">Faculty Sign-In & Emergency Access</h3>
+      </div>
+      <p class="text-xs text-slate-600 mb-3.5">
+        Sign in using your registered college email and emergency password, or request a one-time OTP.
+      </p>
+
+      <div class="space-y-3">
+        <!-- Email Input -->
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Registered Faculty Email</label>
+          <input type="email" id="emergency-email-input" placeholder="e.g. yourname@gmail.com"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+        </div>
+
+        <!-- Emergency Password Input (Without hint) -->
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Emergency Password</label>
+          <input type="password" id="emergency-password-input" placeholder="Enter Emergency Password"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:bg-white transition font-medium">
+        </div>
+
+        <!-- Primary Action: Emergency Password Login -->
+        <button type="button" onclick="app.verifyEmergencyPassword()" id="verify-emergency-pwd-btn"
+          class="w-full py-2.5 px-4 bg-amber-600 active:bg-amber-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-700 transition shadow-sm flex items-center justify-center gap-2">
+          <span>🔑 Log In with Emergency Password</span>
+        </button>
+
+        <!-- Divider with OR -->
+        <div class="relative flex py-1 items-center">
+          <div class="flex-grow border-t border-slate-200"></div>
+          <span class="flex-shrink mx-3 text-slate-400 text-[11px] font-bold uppercase tracking-wider">or sign in via email</span>
+          <div class="flex-grow border-t border-slate-200"></div>
+        </div>
+
+        <!-- Request OTP Button -->
+        <div id="otp-request-block" class="space-y-2">
+          <button type="button" onclick="app.requestEmailOTP()" id="send-otp-btn"
+            class="w-full py-2.5 px-4 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2">
+            <span>📧 Send One-Time OTP</span>
+          </button>
+        </div>
+
+        <!-- Enter OTP Block -->
+        <div id="otp-verify-block" class="hidden space-y-2.5 bg-blue-50 p-4 rounded-xl border border-blue-200">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-blue-900">Enter 6-Digit Verification Code:</span>
+            <button type="button" onclick="app.requestEmailOTP()" class="text-[11px] text-blue-700 hover:text-blue-900 underline font-semibold">Resend Code</button>
+          </div>
+          <div class="flex gap-2">
+            <input type="text" id="emergency-otp-input" maxlength="6" placeholder="123456"
+              class="w-full p-2.5 text-center text-lg tracking-widest font-mono font-bold bg-white border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-800">
+            <button type="button" onclick="app.verifyEmailOTP()" id="verify-otp-btn"
+              class="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-emerald-700 transition shadow-sm whitespace-nowrap">
+              Verify & Enter
+            </button>
+          </div>
+          <p class="text-[11px] text-blue-800">Check your email inbox (and spam folder) for the 6-digit access code.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= LIVE DIAGNOSTICS & DEBUG LOG ================= -->
+    <div id="diagnostic-section" class="mt-4 pt-4 border-t border-slate-200 text-left">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+          <span>🛠️</span>
+          <span>System Diagnostics & Error Inspector</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="app.runDiagnostics()"
+            class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-300 transition">
+            🔄 Refresh Log
+          </button>
+          <button type="button" onclick="app.copyDiagnosticLog()"
+            class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition shadow-sm">
+            📋 Copy Log
+          </button>
+          <button type="button" onclick="app.clearCacheAndReload()"
+            class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-[11px] font-semibold border border-amber-300 transition">
+            🧹 Clear Cache
+          </button>
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-500 mb-2">
+        If you are experiencing access issues, copy this log and share it with the Administrator:
+      </p>
+      <pre id="debug-log-output"
+        class="bg-slate-900 text-emerald-400 p-3 rounded-xl text-[10px] sm:text-[11px] font-mono overflow-x-auto max-h-56 select-all border border-slate-800 leading-tight">Loading diagnostics...</pre>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-4 mt-4 border-t border-slate-100">
+      <a id="denied-switch-acc-btn" href="https://accounts.google.com/AccountChooser" target="_blank"
+        class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-200 border border-slate-300 transition flex items-center justify-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+        </svg>
+        <span>Switch Google Account</span>
+      </a>
+      <button onclick="location.reload()"
+        class="w-full sm:w-auto px-4 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-xs sm:text-sm font-semibold hover:bg-blue-100 border border-blue-200 transition flex items-center justify-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span>Refresh App</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MAIN APP SHELL ================= -->
+  <main id="main-content" class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 hidden">
+
+    <!-- ----------------- TAB 1: MARK ATTENDANCE ----------------- -->
+    <div id="view-mark" class="space-y-4 sm:space-y-6">
+
+      <!-- Session Parameters (Mobile Friendly Accordion / Card) -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <!-- Class Select -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Class</label>
+            <select id="mark-class-select" onchange="app.onMarkClassChange(this.value)"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+              <option value="" disabled selected>Select Class</option>
+            </select>
+          </div>
+          <!-- Date Picker with Quick Today Button -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Date</label>
+              <button type="button" onclick="app.setMarkDateToToday()"
+                class="text-[10px] text-blue-600 hover:text-blue-800 font-bold px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 transition">
+                Today
+              </button>
+            </div>
+            <input type="date" id="mark-date-input" onchange="app.onMarkParameterChange()"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+          </div>
+          <!-- Period Select -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Period</label>
+            <select id="mark-period-select" onchange="app.onMarkParameterChange()"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+              <option value="" disabled selected>Select Period</option>
+              <option value="Period 1">Period 1</option>
+              <option value="Period 2">Period 2</option>
+              <option value="Period 3">Period 3</option>
+              <option value="Period 4">Period 4</option>
+              <option value="Period 5">Period 5</option>
+              <option value="Period 6">Period 6</option>
+            </select>
+          </div>
+          <!-- Subject Input -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Subject
+              (Optional)</label>
+            <input type="text" id="mark-subject-input" placeholder="e.g. Commerce"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+          </div>
+        </div>
+
+        <!-- Dynamic Session Status Banner (New Session vs Existing Session Loaded) -->
+        <div id="session-status-banner"
+          class="mt-3.5 p-3 sm:p-3.5 rounded-xl border text-xs sm:text-sm hidden transition-all">
+        </div>
+      </div>
+
+      <!-- Student Attendance Roster Card -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+
+        <!-- Sub-Header for Batch Quick Actions & Live Filter (Static relative to prevent sticky overlap) -->
+        <div
+          class="relative z-10 bg-slate-50 border-b border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div class="flex items-center space-x-1.5 sm:space-x-2">
+            <button onclick="app.markAll('P')"
+              class="flex-1 sm:flex-none px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition shadow-sm">
+              ✓ All P
+            </button>
+            <button onclick="app.markAll('A')"
+              class="flex-1 sm:flex-none px-3 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition shadow-sm">
+              ✗ All A
+            </button>
+            <button onclick="app.invertAttendance()"
+              class="px-3 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-300 transition">
+              ⇄ Invert
+            </button>
+          </div>
+
+          <!-- Student Filter / Search -->
+          <div class="w-full sm:w-64">
+            <input type="text" id="mark-student-search" oninput="app.filterStudentList(this.value)"
+              placeholder="Search student name or Reg No..."
+              class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition">
+          </div>
+        </div>
+
+        <!-- Live Status & Diagnostic Bar (Guarantees immediate visibility of Student #1 and App Build) -->
+        <div id="mark-roster-status-banner"
+          class="px-3.5 py-2 bg-slate-100/90 border-b border-slate-200 flex justify-between items-center text-xs font-medium text-slate-700">
+          <span id="mark-roster-status-text">Select a class above to load enrolled students.</span>
+          <span
+            class="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-blue-100 text-blue-700 border border-blue-200 flex-shrink-0">Build
+            v2.8</span>
+        </div>
+
+        <!-- Student List Container (Zero Horizontal Scroll on Mobile!) -->
+        <div id="mark-student-list-container" class="divide-y divide-slate-100 min-h-[160px]">
+          <div class="p-8 text-center text-slate-400 text-xs sm:text-sm">
+            Select a class above to load enrolled students.
+          </div>
+        </div>
+
+        <!-- Sticky Mobile & Desktop Action Bar -->
+        <div class="sticky-action-bar p-3 sm:p-4 flex items-center justify-between gap-3">
+          <div class="text-xs sm:text-sm">
+            <div class="text-slate-500 font-medium">Total: <strong id="mark-count-total"
+                class="text-slate-900">0</strong></div>
+            <div class="flex items-center space-x-2 font-bold text-xs mt-0.5">
+              <span class="text-emerald-600">P: <span id="mark-count-present">0</span></span>
+              <span class="text-rose-600">A: <span id="mark-count-absent">0</span></span>
+              <span class="text-amber-600">L: <span id="mark-count-late">0</span></span>
+            </div>
+          </div>
+          <button id="mark-submit-btn" onclick="app.submitAttendance()"
+            class="px-5 py-3 sm:px-6 sm:py-2.5 bg-blue-600 active:bg-blue-800 text-white font-bold rounded-xl shadow-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-xs sm:text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span>Submit Attendance</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ----------------- TAB 2: STUDENT DIRECTORY & RECORD EDITOR ----------------- -->
+    <div id="view-edit" class="space-y-4 sm:space-y-6 hidden">
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <!-- Header & Counter -->
+        <div
+          class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center space-x-2">
+              <span class="p-1.5 bg-blue-50 text-blue-600 rounded-lg text-sm">👥</span>
+              <span>Student Directory & Record Editor</span>
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">Select a class to browse students, search records, add new
+              enrollments, or edit details.</p>
+          </div>
+          <div class="flex items-center space-x-2 flex-wrap gap-y-2">
+            <span id="roster-manager-count"
+              class="px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+              0 students
+            </span>
+            <button type="button" onclick="app.exportRosterForBulkEdit()"
+              class="px-3 py-1.5 bg-emerald-700 active:bg-emerald-900 text-white rounded-xl text-xs font-bold hover:bg-emerald-800 transition shadow-sm flex items-center space-x-1.5"
+              title="Download full class roster to Excel to edit Register Numbers, Names, or Roll Numbers in bulk">
+              <span>📥 Export Excel</span>
+            </button>
+            <button type="button" onclick="app.openBulkUpdateModal()"
+              class="px-3 py-1.5 bg-purple-700 active:bg-purple-900 text-white rounded-xl text-xs font-bold hover:bg-purple-800 transition shadow-sm flex items-center space-x-1.5"
+              title="Upload edited Excel file to apply bulk changes safely">
+              <span>📤 Upload Bulk</span>
+            </button>
+            <button type="button" onclick="app.openAddStudentModal()"
+              class="px-3 py-1.5 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition shadow-sm flex items-center space-x-1.5">
+              <span>+ Add Student</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls: Class Picker & Real-time Search -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Select Class to
+              Manage</label>
+            <select id="roster-manager-class-select" onchange="app.loadRosterForManager(this.value)"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+              <option value="" disabled selected>Select Class</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Search
+              Students</label>
+            <input type="text" id="roster-manager-search" oninput="app.filterRosterManager(this.value)"
+              placeholder="Search by student name, reg no, or roll no..."
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+          </div>
+        </div>
+
+        <!-- Student Roster List (Mobile-Optimized, Zero Horizontal Scroll) -->
+        <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-inner">
+          <div id="roster-manager-list" class="max-h-[460px] overflow-y-auto divide-y divide-slate-100">
+            <div class="p-8 text-center text-slate-400 text-xs sm:text-sm">
+              Please select a class above to view and edit student records.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ----------------- TAB 3: REPORTS & ANALYTICS ----------------- -->
+    <div id="view-report" class="space-y-4 sm:space-y-6 hidden">
+      <!-- Filter Card -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Class</label>
+            <select id="report-class-select"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition font-medium">
+              <option value="" disabled selected>Select Class</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">From Date</label>
+            <input type="date" id="report-from-date"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition font-medium">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">To Date</label>
+            <input type="date" id="report-to-date"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition font-medium">
+          </div>
+          <div>
+            <button onclick="app.generateReport()" id="report-generate-btn"
+              class="w-full py-2.5 sm:py-3 bg-blue-600 active:bg-blue-800 text-white font-bold rounded-xl hover:bg-blue-700 transition flex items-center justify-center space-x-2 text-xs sm:text-sm shadow-sm">
+              <span>Generate Report</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div id="report-kpi-container" class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 hidden">
+        <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Hours Conducted</div>
+          <div id="kpi-total-sessions" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">0</div>
+        </div>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Class Average Attendance</div>
+          <div id="kpi-average-attendance" class="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-1">0.00%</div>
+        </div>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Shortage of Attendance (&lt;75%)
+          </div>
+          <div id="kpi-shortage-count" class="text-2xl sm:text-3xl font-extrabold text-rose-600 mt-1">0</div>
+        </div>
+      </div>
+
+      <!-- Report Card & Action Header -->
+      <div id="report-table-card" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+        <div
+          class="p-3 sm:p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <h3 class="text-sm font-bold text-slate-800">Student Attendance Summary</h3>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="app.openMatrixRegisterModal()"
+              class="flex-1 sm:flex-none px-3.5 py-2 bg-indigo-600 active:bg-indigo-800 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition flex items-center justify-center space-x-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                </path>
+              </svg>
+              <span>Register Matrix PDF</span>
+            </button>
+            <button onclick="app.exportReportToExcel()"
+              class="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-700 active:bg-emerald-900 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 transition flex items-center justify-center space-x-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              </svg>
+              <span>Download Excel</span>
+            </button>
+            <button onclick="app.printOfficialReport()"
+              class="flex-1 sm:flex-none px-3.5 py-2 bg-slate-800 active:bg-slate-950 text-white text-xs font-bold rounded-xl hover:bg-slate-900 transition flex items-center justify-center space-x-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+                </path>
+              </svg>
+              <span>Print Summary</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Desktop View Table -->
+        <div class="hidden sm:block overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-left">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <tr>
+                <th class="px-4 py-3">Reg No</th>
+                <th class="px-6 py-3">Student Name</th>
+                <th class="px-4 py-3" id="report-th-dept">Home Dept</th>
+                <th class="px-4 py-3 text-center">Present</th>
+                <th class="px-4 py-3 text-center">Late</th>
+                <th class="px-4 py-3 text-center">Absent</th>
+                <th class="px-4 py-3 text-center">Total Hours</th>
+                <th class="px-6 py-3 text-center">Attendance %</th>
+              </tr>
+            </thead>
+            <tbody id="report-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
+          </table>
+        </div>
+
+        <!-- Mobile Card List View -->
+        <div id="report-mobile-card-list" class="sm:hidden divide-y divide-slate-100"></div>
+
+      </div>
+    </div>
+
+    <!-- ----------------- TAB 4: IMPORT CLASS ROSTER (ADMIN ONLY) ----------------- -->
+    <div id="view-import" class="space-y-4 sm:space-y-6 hidden">
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 max-w-3xl mx-auto">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <h2 class="text-base sm:text-xl font-bold text-slate-900 mb-1">Import Class Roster from Excel / CSV</h2>
+            <p class="text-xs sm:text-sm text-slate-500">File should contain <code
+                class="bg-slate-100 text-blue-600 px-1 py-0.5 rounded">Reg No</code>, <code
+                class="bg-slate-100 text-blue-600 px-1 py-0.5 rounded">Name</code>, and optional <code
+                class="bg-slate-100 text-purple-600 px-1 py-0.5 rounded">Department</code> (for Minor/MDC).</p>
+          </div>
+          <button onclick="app.downloadSampleTemplate()"
+            class="w-full sm:w-auto px-4 py-2 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition flex items-center justify-center space-x-2 shadow-sm">
+            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            <span>Download Sample Template (.xlsx)</span>
+          </button>
+        </div>
+
+        <!-- Class Selection / New Class Name -->
+        <div class="space-y-4 mb-6">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Target Class</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select id="import-existing-class-select" onchange="app.onImportClassSelectChange(this.value)"
+                class="p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition font-medium">
+                <option value="" selected>+ Create New Class</option>
+              </select>
+              <input type="text" id="import-custom-class-name" placeholder="Type Class Name (e.g. S3 FYUGP)"
+                class="p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition font-medium">
+            </div>
+          </div>
+
+          <!-- Drag and Drop Dropzone -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Choose File</label>
+            <div id="dropzone" onclick="document.getElementById('excel-file-input').click()"
+              class="border-2 border-dashed border-slate-300 rounded-2xl p-6 sm:p-8 text-center hover:border-blue-500 hover:bg-blue-50/50 cursor-pointer transition">
+              <svg class="w-10 h-10 sm:w-12 sm:h-12 text-slate-400 mx-auto mb-2 sm:mb-3" fill="none"
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+              </svg>
+              <p class="text-xs sm:text-sm font-bold text-slate-700">Tap to upload or drag & drop</p>
+              <p class="text-[11px] sm:text-xs text-slate-500 mt-1">.xlsx, .xls, or .csv</p>
+              <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" onchange="app.handleExcelFile(event)"
+                class="hidden">
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview Table -->
+        <div id="import-preview-container" class="hidden space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800">Preview Students (<span
+                id="import-preview-count">0</span>)</h3>
+            <span class="text-xs text-emerald-600 font-bold">Ready to commit</span>
+          </div>
+
+          <div class="max-h-60 overflow-y-auto border border-slate-200 rounded-xl">
+            <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+              <thead class="bg-slate-50 text-slate-500 uppercase sticky top-0 font-bold">
+                <tr>
+                  <th class="px-3 py-2">Reg No</th>
+                  <th class="px-3 py-2">Student Name</th>
+                  <th class="px-3 py-2">Roll No</th>
+                  <th class="px-3 py-2">Home Dept</th>
+                </tr>
+              </thead>
+              <tbody id="import-preview-table-body" class="divide-y divide-slate-200"></tbody>
+            </table>
+          </div>
+
+          <div class="pt-2 flex justify-end">
+            <button id="import-commit-btn" onclick="app.commitRosterImport()"
+              class="w-full sm:w-auto px-6 py-3 bg-blue-600 active:bg-blue-800 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-md flex items-center justify-center space-x-2 text-sm">
+              <span>Commit & Save Roster</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ----------------- TAB 5: BATCH PROMOTION & ACADEMIC PROGRESSION (ADMIN ONLY) ----------------- -->
+    <div id="view-promote" class="space-y-4 sm:space-y-6 hidden">
+      <!-- Header Banner -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="text-lg sm:text-2xl font-bold text-slate-900 flex items-center space-x-2">
+            <span>🎓</span>
+            <span>Batch Promotion & Academic Progression</span>
+          </h1>
+          <p class="text-xs sm:text-sm text-slate-500">
+            Promote an entire cohort or selected students to the next semester (e.g. S1 → S2, S3 → S4).
+          </p>
+        </div>
+        <span
+          class="px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1.5 shadow-sm">
+          <span>🛡️</span>
+          <span>Zero Data Loss Active</span>
+        </span>
+      </div>
+
+      <!-- 3 Key Pillars of Safe Promotion -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="p-3.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs space-y-1">
+          <div class="font-bold text-blue-900 flex items-center space-x-1.5">
+            <span>❄️</span>
+            <span>Historical Freezing</span>
+          </div>
+          <p class="text-[11px] text-blue-800 leading-relaxed">
+            Attendance sessions marked in the previous semester remain permanently locked under that semester's ID.
+          </p>
+        </div>
+        <div class="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs space-y-1">
+          <div class="font-bold text-emerald-900 flex items-center space-x-1.5">
+            <span>📊</span>
+            <span>Auditable Reports</span>
+          </div>
+          <p class="text-[11px] text-emerald-800 leading-relaxed">
+            Selecting the previous class in Reports will always show the exact historical attendance hours earned.
+          </p>
+        </div>
+        <div class="p-3.5 bg-purple-50/70 border border-purple-100 rounded-xl text-xs space-y-1">
+          <div class="font-bold text-purple-900 flex items-center space-x-1.5">
+            <span>🆕</span>
+            <span>Clean Progression</span>
+          </div>
+          <p class="text-[11px] text-purple-800 leading-relaxed">
+            The newly promoted semester starts fresh with 0 hours, with zero period overlap or calculation errors.
+          </p>
+        </div>
+      </div>
+
+      <!-- Step 1: Select Classes -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div class="flex items-center space-x-2 text-sm font-bold text-slate-800">
+          <span
+            class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">1</span>
+          <span>Select Source and Target Classes</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Source Class
+              (Current Semester)</label>
+            <select id="promote-source-class" onchange="app.onPromoteSourceClassChange(this.value)"
+              class="w-full p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800">
+              <option value="" disabled selected>Select Source Class to Promote</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Target Class Name
+              (New Semester)</label>
+            <input type="text" id="promote-target-name" placeholder="e.g. S2 FYUGP Botany"
+              class="w-full p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800">
+          </div>
+        </div>
+
+        <div class="pt-1">
+          <label class="inline-flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
+            <input type="checkbox" id="promote-archive-source" checked
+              class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500">
+            <span>Archive source class (hides completed semester from daily period marking, keeps it accessible in
+              Reports)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 2: Select Students -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-sm font-bold text-slate-800">
+            <span
+              class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">2</span>
+            <span>Select Students to Promote</span>
+          </div>
+          <span id="promote-selection-badge" class="text-xs text-slate-500 font-medium">Select source class above</span>
+        </div>
+
+        <!-- Empty state when no class chosen yet -->
+        <div id="promote-empty-state" class="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl">
+          <svg class="w-10 h-10 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z">
+            </path>
+          </svg>
+          <p class="text-xs sm:text-sm font-semibold text-slate-600">Please choose a Source Class in Step 1</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Students enrolled in that class will automatically appear here
+            for promotion.</p>
+        </div>
+
+        <!-- Loaded Students Checklist -->
+        <div id="promote-selection-wrapper" class="hidden space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-xl text-xs">
+            <div class="flex items-center space-x-3">
+              <label class="inline-flex items-center space-x-1.5 cursor-pointer font-bold text-slate-700">
+                <input type="checkbox" id="promote-select-all" onchange="app.toggleSelectAllPromotion(this.checked)"
+                  class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" checked>
+                <span>Select All</span>
+              </label>
+              <span class="text-slate-300">|</span>
+              <span class="text-slate-600 font-medium">
+                <span id="promote-selected-count" class="font-bold text-blue-600">0</span> of <span
+                  id="promote-total-count" class="font-bold">0</span> students selected
+              </span>
+            </div>
+            <div class="w-full sm:w-auto">
+              <input type="text" id="promote-search-input" onkeyup="app.filterPromotionStudentList(this.value)"
+                placeholder="Search student name / reg no..."
+                class="w-full sm:w-48 p-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div id="promote-students-list"
+            class="max-h-72 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white p-1">
+            <!-- Student checklist rendered here -->
+          </div>
+
+          <div class="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
+            <p class="text-xs text-slate-500">
+              Only checked students will be enrolled in the new class. Unchecked students remain in their current class.
+            </p>
+            <button id="promote-submit-btn" onclick="app.executeBatchPromotion()"
+              class="w-full sm:w-auto px-6 py-3 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-md flex items-center justify-center space-x-2 flex-shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6">
+                </path>
+              </svg>
+              <span>Execute Batch Promotion</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ----------------- TAB 6: USER & PORTAL MANAGEMENT (ADMIN ONLY) ----------------- -->
+    <div id="view-users" class="space-y-4 sm:space-y-6 hidden">
+
+      <!-- System Configuration Card (Admin Only) -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-slate-900 flex items-center space-x-2">
+              <span>⚙️</span>
+              <span>Portal & College Settings</span>
+            </h2>
+            <p class="text-xs text-slate-500">Edit institutional headers and the minimum attendance alert threshold.</p>
+          </div>
+          <span
+            class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-slate-100 text-slate-600 border border-slate-200">Admin
+            Only</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-end">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">College /
+              Institution Name</label>
+            <input type="text" id="config-college-name" placeholder="e.g. PTB College of Arts & Science"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Portal Subtitle /
+              Department</label>
+            <input type="text" id="config-portal-title" placeholder="e.g. Department Attendance Management"
+              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Min Attendance %
+              Threshold</label>
+            <div class="flex space-x-2">
+              <input type="number" id="config-min-attendance" min="1" max="100" placeholder="75"
+                class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-bold font-mono">
+              <button onclick="app.savePortalConfig()" id="save-config-btn"
+                class="px-4 py-2.5 sm:py-3 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm whitespace-nowrap flex-shrink-0">
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Authorized Users Card -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <h2 class="text-base sm:text-xl font-bold text-slate-900">Authorized Users</h2>
+            <p class="text-xs sm:text-sm text-slate-500">Only Google accounts listed here can access the portal.</p>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <button onclick="app.syncDrivePermissions()" id="sync-drive-btn"
+              class="w-full sm:w-auto px-3.5 py-2.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs sm:text-sm font-bold hover:bg-indigo-100 transition shadow-sm flex items-center justify-center gap-1.5">
+              <span>🔄 Sync Drive Permissions</span>
+            </button>
+            <button onclick="app.openAddUserModal()"
+              class="w-full sm:w-auto px-4 py-2.5 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center justify-center space-x-2">
+              <span>+ Add New User</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Desktop Users Table -->
+        <div class="hidden sm:block overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-left">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <tr>
+                <th class="px-4 sm:px-6 py-3">Name</th>
+                <th class="px-4 sm:px-6 py-3">Google Email</th>
+                <th class="px-3 sm:px-4 py-3">Role</th>
+                <th class="px-3 sm:px-4 py-3">Status</th>
+                <th class="px-4 sm:px-6 py-3 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body" class="divide-y divide-slate-200 text-xs sm:text-sm"></tbody>
+          </table>
+        </div>
+
+        <!-- Mobile Users Card List (Zero Horizontal Scroll!) -->
+        <div id="users-mobile-card-list"
+          class="sm:hidden divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white"></div>
+      </div>
+
+      <!-- Card 3: Data Maintenance & Reset Tools (Admin Only) -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-rose-200">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-rose-900 flex items-center space-x-2">
+              <span>⚠️</span>
+              <span>Data Maintenance & Reset Tools</span>
+            </h2>
+            <p class="text-xs text-rose-600">Safely clear attendance history or completely remove an obsolete class from
+              the database.</p>
+          </div>
+          <span
+            class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-rose-100 text-rose-700 border border-rose-200">Destructive
+            Action</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+          <div class="space-y-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Select Target
+                Class</label>
+              <select id="clear-class-select"
+                class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 font-medium">
+                <option value="" disabled selected>Select Class to Reset</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Action
+                Mode</label>
+              <div class="space-y-2">
+                <label
+                  class="flex items-start space-x-2.5 p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white cursor-pointer transition">
+                  <input type="radio" name="clear-mode" value="attendance_only" checked
+                    class="mt-0.5 text-rose-600 focus:ring-rose-500">
+                  <div>
+                    <p class="text-xs font-bold text-slate-800">Clear Attendance Sessions Only</p>
+                    <p class="text-[11px] text-slate-500">Deletes all marked sessions and records for this class.
+                      Preserves student roster and enrollment.</p>
+                  </div>
+                </label>
+                <label
+                  class="flex items-start space-x-2.5 p-2.5 rounded-xl border border-rose-200 bg-rose-50/50 hover:bg-rose-50 cursor-pointer transition">
+                  <input type="radio" name="clear-mode" value="class_and_attendance"
+                    class="mt-0.5 text-rose-600 focus:ring-rose-500">
+                  <div>
+                    <p class="text-xs font-bold text-rose-800">Complete Purge (Class + Students + Sessions)</p>
+                    <p class="text-[11px] text-rose-600">Completely deletes the class, student roster, and all
+                      associated attendance records.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+            <div class="font-bold flex items-center space-x-1.5">
+              <span>🛡️</span>
+              <span>Safety Protections Active</span>
+            </div>
+            <p class="text-[11px] leading-relaxed text-amber-800">
+              Attendance records for other classes are strictly isolated and will not be affected. A confirmation dialog
+              will be required before any deletions are committed to Google Sheets.
+            </p>
+            <div class="pt-2">
+              <button onclick="app.openClearDataModal()"
+                class="w-full sm:w-auto px-4 py-2.5 bg-rose-600 active:bg-rose-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-rose-700 transition shadow-sm flex items-center justify-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                  </path>
+                </svg>
+                <span>Clear Class Data...</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= ADD USER MODAL (RESPONSIVE) ================= -->
+  <div id="add-user-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base sm:text-lg font-bold text-slate-900">Add Authorized User</h3>
+        <button onclick="app.closeAddUserModal()"
+          class="text-slate-400 hover:text-slate-600 text-lg font-bold p-1">✕</button>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">
+        Adding an email gives them immediate access to the app and automatically grants edit rights to the Google Sheet.
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Full Name</label>
+          <input type="text" id="new-user-name" placeholder="Prof. Jane Doe"
+            class="w-full p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Google Email
+            Address</label>
+          <input type="email" id="new-user-email" placeholder="jane@gmail.com"
+            class="w-full p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Role</label>
+          <select id="new-user-role"
+            class="w-full p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition font-medium">
+            <option value="Faculty" selected>Faculty (Can Mark & View Reports)</option>
+            <option value="Admin">Admin (Full Control & User Management)</option>
+          </select>
+        </div>
+      </div>
+      <div class="pt-3 flex justify-end space-x-2.5">
+        <button onclick="app.closeAddUserModal()"
+          class="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800">Cancel</button>
+        <button onclick="app.saveNewUser()" id="save-user-btn"
+          class="px-5 py-2.5 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm">Save
+          User</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CLEAR DATA CONFIRMATION MODAL ================= -->
+  <div id="clear-confirm-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 sm:p-6 space-y-4 border border-rose-200">
+      <div class="flex items-center space-x-3 text-rose-600">
+        <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+            </path>
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900">Confirm Data Deletion</h3>
+          <p class="text-xs text-rose-600 font-semibold" id="clear-modal-subtitle">Permanently delete attendance history
+          </p>
+        </div>
+      </div>
+
+      <div class="p-3 bg-rose-50 rounded-xl border border-rose-100 text-xs text-rose-800 space-y-1">
+        <p><strong>Target Class:</strong> <span id="clear-modal-class-name" class="font-mono font-bold"></span></p>
+        <p><strong>Action:</strong> <span id="clear-modal-mode-desc"></span></p>
+        <p class="text-[11px] text-rose-700 pt-1">This operation cannot be undone. To prevent accidental data loss,
+          please type <span class="font-bold underline">DELETE</span> below.</p>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Type "DELETE" to
+          confirm</label>
+        <input type="text" id="clear-confirm-input" placeholder="DELETE"
+          class="w-full p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 font-mono font-bold tracking-widest text-rose-700 uppercase">
+      </div>
+
+      <div class="pt-2 flex justify-end space-x-2.5">
+        <button onclick="app.closeClearDataModal()"
+          class="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800">Cancel</button>
+        <button onclick="app.confirmClearClassData()" id="confirm-clear-btn"
+          class="px-5 py-2.5 bg-rose-600 active:bg-rose-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-rose-700 transition shadow-sm flex items-center space-x-2">
+          <span>Permanently Delete</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= EDIT STUDENT DETAILS MODAL (FACULTY & ADMIN) ================= -->
+  <div id="edit-student-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 sm:p-6 space-y-4 border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">✏️</span>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900">Edit Student Record</h3>
+            <p class="text-xs text-slate-500">Correct typos in name, register number, or roll number.</p>
+          </div>
+        </div>
+        <button onclick="app.closeEditStudentModal()"
+          class="text-slate-400 hover:text-slate-600 text-lg font-bold p-1">✕</button>
+      </div>
+
+      <div class="p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 space-y-1">
+        <p><strong>🛡️ Safe Update:</strong> Past attendance records are permanently bound to the student's unique
+          system key and will <strong>not</strong> be lost or altered.</p>
+      </div>
+
+      <input type="hidden" id="edit-student-id">
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Register
+            Number</label>
+          <input type="text" id="edit-student-reg" placeholder="e.g. CHBASBO001"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono font-bold uppercase transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Student Full
+            Name</label>
+          <input type="text" id="edit-student-name" placeholder="e.g. ABHINAV J"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Roll Number</label>
+          <input type="text" id="edit-student-roll" placeholder="e.g. 1"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+            Home Department <span class="text-slate-400 font-normal lowercase">(for Minor / MDC students only)</span>
+          </label>
+          <input type="text" id="edit-student-dept" placeholder="e.g. Chemistry, Commerce (leave blank for Home Dept)"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium transition">
+        </div>
+      </div>
+
+      <div class="pt-2 flex justify-end space-x-2.5">
+        <button onclick="app.closeEditStudentModal()"
+          class="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800">Cancel</button>
+        <button onclick="app.saveStudentDetails()" id="save-student-btn"
+          class="px-5 py-2.5 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center space-x-2">
+          <span>Save Changes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ADD STUDENT MODAL ================= -->
+  <div id="add-student-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+            ➕
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900">Add New Student</h3>
+            <p class="text-xs text-slate-500">Enroll an individual student into the selected class roster.</p>
+          </div>
+        </div>
+        <button onclick="app.closeAddStudentModal()"
+          class="text-slate-400 hover:text-slate-600 text-lg font-bold p-1">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Target Class</label>
+          <select id="add-student-class-select"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium transition">
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Register Number <span
+              class="text-rose-500">*</span></label>
+          <input type="text" id="add-student-reg" placeholder="e.g. CHBASBO045"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono font-bold uppercase transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Student Full Name
+            <span class="text-rose-500">*</span></label>
+          <input type="text" id="add-student-name" placeholder="e.g. RAHUL KRISHNA"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Roll Number</label>
+          <input type="text" id="add-student-roll" placeholder="e.g. 45"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono transition">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+            Home Department <span class="text-slate-400 font-normal lowercase">(for Minor / MDC students only)</span>
+          </label>
+          <input type="text" id="add-student-dept" placeholder="e.g. Chemistry, Commerce (leave blank for Home Dept)"
+            class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium transition">
+        </div>
+      </div>
+
+      <div class="pt-2 flex justify-end space-x-2.5">
+        <button onclick="app.closeAddStudentModal()"
+          class="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800">Cancel</button>
+        <button onclick="app.submitNewStudent()" id="submit-add-student-btn"
+          class="px-5 py-2.5 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center space-x-2">
+          <span>Add Student</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BULK UPDATE ROSTER MODAL ================= -->
+  <div id="bulk-update-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2">
+          <div
+            class="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">
+            📤
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900">Bulk Update Register Numbers & Roster</h3>
+            <p class="text-xs text-slate-500">Upload the edited Excel file. Changes to Register Numbers or names will be
+              safely applied.</p>
+          </div>
+        </div>
+        <button onclick="app.closeBulkUpdateModal()"
+          class="text-slate-400 hover:text-slate-600 text-lg font-bold p-1">✕</button>
+      </div>
+
+      <div class="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-blue-900 space-y-1">
+        <p><strong>🛡️ Safe Key Preservation:</strong> The system matches students by their permanent
+          <code>Student Key</code>. All past attendance sessions, percentages, and register entries will remain
+          <strong>100% intact and connected</strong>.
+        </p>
+      </div>
+
+      <!-- File Upload Box -->
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Select Edited Excel File (.xlsx / .csv)</label>
+        <input type="file" id="bulk-update-file-input" accept=".xlsx, .xls, .csv"
+          onchange="app.handleBulkUpdateFile(event)"
+          class="block w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer border border-slate-200 rounded-xl bg-slate-50">
+      </div>
+
+      <!-- Preview Container -->
+      <div id="bulk-preview-container" class="space-y-3 hidden">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold text-slate-800">Preview Changes (<span id="bulk-preview-count">0</span> students
+            detected)</span>
+          <span id="bulk-change-summary"
+            class="text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200 text-[11px]"></span>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 font-bold">
+              <tr>
+                <th class="px-3 py-2">Current Reg No</th>
+                <th class="px-3 py-2">New Reg No</th>
+                <th class="px-3 py-2">Student Name</th>
+                <th class="px-3 py-2">Roll No</th>
+                <th class="px-3 py-2">Home Dept</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-preview-tbody" class="divide-y divide-slate-100 bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pt-2 flex justify-end space-x-2.5">
+        <button onclick="app.closeBulkUpdateModal()"
+          class="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800">Cancel</button>
+        <button onclick="app.commitBulkUpdate()" id="commit-bulk-update-btn" disabled
+          class="px-5 py-2.5 bg-purple-700 active:bg-purple-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-purple-800 transition shadow-sm flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span>Apply Bulk Changes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PRINTABLE REGISTER TEMPLATE ================= -->
+  <div id="printable-area" class="hidden p-8 font-serif text-black">
+    <div class="text-center border-b-2 border-black pb-4 mb-6">
+      <h1 class="text-2xl font-bold uppercase" id="print-college-name">Attendance App</h1>
+      <h2 class="text-base font-semibold uppercase mt-1">Department Attendance Register Report</h2>
+      <p class="text-xs mt-1" id="print-meta-header">Class: S3 FYUGP | Period: All</p>
+    </div>
+
+    <table class="w-full border-collapse border border-black text-xs mb-8">
+      <thead>
+        <tr class="bg-gray-100">
+          <th class="border border-black px-2 py-1 text-left">Reg No</th>
+          <th class="border border-black px-2 py-1 text-left">Student Name</th>
+          <th class="border border-black px-2 py-1 text-left" id="print-th-dept">Home Dept</th>
+          <th class="border border-black px-2 py-1 text-center">Present</th>
+          <th class="border border-black px-2 py-1 text-center">Late</th>
+          <th class="border border-black px-2 py-1 text-center">Absent</th>
+          <th class="border border-black px-2 py-1 text-center">Total Hours</th>
+          <th class="border border-black px-2 py-1 text-center">% Attendance</th>
+        </tr>
+      </thead>
+      <tbody id="print-table-body"></tbody>
+    </table>
+
+    <div class="grid grid-cols-3 gap-8 mt-16 text-center text-xs pt-8">
+      <div>
+        <div class="border-t border-black pt-2">Class Tutor Signature</div>
+      </div>
+      <div>
+        <div class="border-t border-black pt-2">Head of Department (HOD)</div>
+      </div>
+      <div>
+        <div class="border-t border-black pt-2">Principal Signature & Seal</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ATTENDANCE REGISTER MATRIX MODAL ================= -->
+  <div id="matrix-register-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full flex flex-col max-h-[92vh] overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-sm">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+              </path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">Attendance Register Sheet (Matrix View)</h3>
+            <p class="text-[11px] text-slate-500">Paginated A4 Daily Columnar Register (P/A/L Breakdown)</p>
+          </div>
+        </div>
+        <button onclick="app.closeMatrixRegisterModal()"
+          class="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">✕</button>
+      </div>
+
+      <!-- Controls & Orientation Toolbar -->
+      <div class="p-3 sm:px-6 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center space-x-2">
+          <span class="text-slate-600 font-bold">Orientation:</span>
+          <div class="inline-flex rounded-lg border border-slate-300 p-0.5 bg-slate-100">
+            <button id="matrix-btn-landscape" onclick="app.setMatrixOrientation('landscape')"
+              class="px-3 py-1.5 rounded-md font-bold text-xs transition bg-white text-indigo-700 shadow-sm">
+              📄 Landscape (A4)
+            </button>
+            <button id="matrix-btn-portrait" onclick="app.setMatrixOrientation('portrait')"
+              class="px-3 py-1.5 rounded-md font-bold text-xs transition text-slate-600 hover:text-slate-900">
+              📄 Portrait (A4)
+            </button>
+          </div>
+        </div>
+
+        <div id="matrix-chunk-info" class="text-slate-500 font-medium text-[11px]">
+          Calculated for standard A4 printing
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button id="matrix-direct-download-btn" onclick="app.downloadMatrixPdfDirect()"
+            class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-900 text-white font-bold rounded-xl shadow-sm transition flex items-center space-x-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            <span>Download PDF</span>
+          </button>
+          <button onclick="app.printMatrixRegister()"
+            class="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-bold rounded-xl shadow-sm transition flex items-center space-x-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+              </path>
+            </svg>
+            <span>Print / Save as PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Printable Preview Container -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100">
+        <div id="matrix-preview-container" class="space-y-6"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= OFFLINE QUEUE MANAGEMENT MODAL ================= -->
+  <div id="offline-queue-modal"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full flex flex-col max-h-[85vh] overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="bg-amber-500 text-white p-2 rounded-xl shadow-sm">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">Offline Attendance Queue</h3>
+            <p class="text-[11px] text-slate-500">Saved locally on this device • Ready to sync</p>
+          </div>
+        </div>
+        <button onclick="app.closeOfflineQueueModal()"
+          class="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">✕</button>
+      </div>
+
+      <!-- Modal Body (Queue List) -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+        <div id="offline-queue-list-container" class="space-y-2.5">
+          <!-- Dynamically populated queue items -->
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 sm:p-4 bg-white border-t border-slate-200 flex items-center justify-between gap-2">
+        <span id="offline-queue-modal-summary" class="text-xs font-semibold text-slate-600">0 sessions pending</span>
+        <div class="flex items-center space-x-2">
+          <button onclick="app.closeOfflineQueueModal()"
+            class="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+            Close
+          </button>
+          <button id="offline-sync-all-btn" onclick="app.syncOfflineQueue()"
+            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-900 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <span>Sync All to Sheets</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Container for Window.Print -->
+  <div id="printable-matrix-area" class="hidden"></div>
+
+  <!-- Include Client Controller Script -->
+  <?!= include('ClientScript'); ?>
+
+</body>
+
+</html>
