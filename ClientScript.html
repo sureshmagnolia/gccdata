@@ -50,12 +50,22 @@
           args: args
         };
 
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const heavyMethods = new Set([
+          'getAttendanceReport', 'downloadRegisterPdf', 'syncOfflineSessionsBatch',
+          'importClassRoster', 'promoteBatch', 'clearClassAttendanceData', 'bulkUpdateStudentRoster'
+        ]);
+        const timeoutMs = heavyMethods.has(method) ? 45000 : 15000;
+        const timerId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
         fetch(APPS_SCRIPT_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: controller ? controller.signal : undefined
         })
         .then(res => {
+          if (timerId) clearTimeout(timerId);
           if (!res.ok) throw new Error("Server returned HTTP " + res.status);
           return res.json();
         })
@@ -63,6 +73,7 @@
           if (success) success(data);
         })
         .catch(err => {
+          if (timerId) clearTimeout(timerId);
           console.warn("API request failed (" + method + "):", err);
           if (failure) failure(err);
         });
@@ -99,6 +110,9 @@
       manualPeriodSelected: false,
       scheduleActiveTab: 'regular',
       currentTab: 'mark',
+      activeSessionKey: '',
+      isExistingSession: false,
+      existingSession: null,
       students: [],
       attendanceRecords: {}, // regNo -> status (P/A/L)
       editStudents: [],
@@ -231,6 +245,18 @@
                   // Update Admin tabs visibility if role elevated
                   if (data.user.role === 'Admin') {
                     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+                    this.renderPeriodScheduleEditor();
+                  }
+
+                  // Refresh dropdowns silently (preserving any class user already picked) and update offline readiness badge
+                  this.populateClassDropdowns(true);
+                  if (!this.state.manualPeriodSelected) {
+                    const curDate = document.getElementById('mark-date-input') ? document.getElementById('mark-date-input').value : new Date().toLocaleDateString('en-CA');
+                    this.renderPeriodOptions(curDate, true);
+                  }
+                  const markSelect = document.getElementById('mark-class-select');
+                  if (!markSelect || !markSelect.value) {
+                    this.updateMarkUnselectedStatus();
                   }
                 } else {
                   // Admin revoked or deactivated access in the backend
@@ -285,12 +311,14 @@
         this.setAuthToken(data.user.authToken);
       }
 
-      // Save to device local cache for future 1-click sessions
+      // Save to device local cache for future 1-click & offline sessions
       if (!isFromOfflineCache) {
         this.setCachedMetadata(data);
         if (data.allRosters) {
           this.setCachedRosters(data.allRosters);
         }
+      } else if (data.allRosters && Object.keys(this.getCachedRosters()).length === 0) {
+        this.setCachedRosters(data.allRosters);
       }
 
       // Authorization success
@@ -356,15 +384,16 @@
       // Update Offline Indicators & Sync Pill
       this.updateOfflineUI();
 
-      // Auto-select remembered class
-      const savedClass = localStorage.getItem('attendance_class');
-      if (savedClass && this.state.classes.some(c => c.classId === savedClass)) {
-        const markClass = document.getElementById('mark-class-select');
-        if (markClass) {
-          markClass.value = savedClass;
-          this.onMarkClassChange(savedClass);
-        }
+      // Do NOT default Class to any class on startup; let the user choose explicitly
+      try { localStorage.removeItem('attendance_class'); } catch (e) {}
+      const markClassEl = document.getElementById('mark-class-select');
+      if (markClassEl) {
+        markClassEl.value = '';
       }
+      this.state.students = [];
+      this.state.attendanceRecords = {};
+      this.renderMarkStudentTable();
+      this.onMarkParameterChange();
 
       if (isFromOfflineCache) {
         if (!navigator.onLine) {
@@ -540,7 +569,7 @@
       }
     },
 
-    populateClassDropdowns() {
+    populateClassDropdowns(preserveSelection = false) {
       const markSelect = document.getElementById('mark-class-select');
       const rosterManagerSelect = document.getElementById('roster-manager-class-select');
       const reportSelect = document.getElementById('report-class-select');
@@ -548,16 +577,25 @@
       const promoteSelect = document.getElementById('promote-source-class');
       const clearSelect = document.getElementById('clear-class-select');
 
+      const prevValues = {};
+      if (preserveSelection) {
+        [markSelect, rosterManagerSelect, reportSelect, importExisting, promoteSelect, clearSelect].forEach(el => {
+          if (el && el.id) prevValues[el.id] = el.value;
+        });
+      }
+
       const activeClasses = (this.state.classes || []).filter(c => c.status !== 'Archived');
       const archivedClasses = (this.state.classes || []).filter(c => c.status === 'Archived');
 
-      // 1. Mark Attendance: Active classes only
+      // 1. Mark Attendance: Active classes only (never default-selected)
       if (markSelect) {
         let html = '<option value="" disabled selected>Select Class</option>';
         activeClasses.forEach(c => {
           html += `<option value="${c.classId}">${c.className}</option>`;
         });
         markSelect.innerHTML = html;
+        const prevMark = prevValues['mark-class-select'];
+        markSelect.value = (prevMark && activeClasses.some(c => c.classId === prevMark)) ? prevMark : '';
       }
 
       // 2. Student Directory & Record Editor: Active + Archived
@@ -574,6 +612,10 @@
           rHtml += '</optgroup>';
         }
         rosterManagerSelect.innerHTML = rHtml;
+        const prevRoster = prevValues['roster-manager-class-select'];
+        if (prevRoster && (this.state.classes || []).some(c => c.classId === prevRoster)) {
+          rosterManagerSelect.value = prevRoster;
+        }
       }
 
       // 3. Reports: Active + Archived
@@ -590,6 +632,10 @@
           html += '</optgroup>';
         }
         reportSelect.innerHTML = html;
+        const prevReport = prevValues['report-class-select'];
+        if (prevReport && (this.state.classes || []).some(c => c.classId === prevReport)) {
+          reportSelect.value = prevReport;
+        }
       }
 
       // 4. Batch Promotion: Active classes only
@@ -599,6 +645,10 @@
           html += `<option value="${c.classId}">${c.className}</option>`;
         });
         promoteSelect.innerHTML = html;
+        const prevPromote = prevValues['promote-source-class'];
+        if (prevPromote && activeClasses.some(c => c.classId === prevPromote)) {
+          promoteSelect.value = prevPromote;
+        }
       }
 
       // 5. Data Maintenance Reset: All classes
@@ -609,6 +659,10 @@
           html += `<option value="${c.classId}">${c.className}${suffix}</option>`;
         });
         clearSelect.innerHTML = html;
+        const prevClear = prevValues['clear-class-select'];
+        if (prevClear && (this.state.classes || []).some(c => c.classId === prevClear)) {
+          clearSelect.value = prevClear;
+        }
       }
 
       // 6. Import Class: Shows New, Active, and Archived Classes for Re-use
@@ -629,6 +683,10 @@
           importHtml += '</optgroup>';
         }
         importExisting.innerHTML = importHtml;
+        const prevImport = prevValues['import-existing-class-select'];
+        if (prevImport !== undefined && prevImport !== '' && (this.state.classes || []).some(c => c.classId === prevImport)) {
+          importExisting.value = prevImport;
+        }
       }
     },
 
@@ -891,8 +949,16 @@
     },
 
     onMarkClassChange(classId) {
-      if (!classId) return;
-      localStorage.setItem('attendance_class', classId);
+      this.state.activeSessionKey = '';
+      this.state.isExistingSession = false;
+      this.state.existingSession = null;
+      if (!classId) {
+        this.state.students = [];
+        this.state.attendanceRecords = {};
+        this.renderMarkStudentTable();
+        this.onMarkParameterChange();
+        return;
+      }
 
       // Clear search query so previous filters do not inadvertently hide students
       const searchInput = document.getElementById('mark-student-search');
@@ -908,9 +974,9 @@
         this.updateDateDisplay(todayIso);
       }
 
-      // Ensure period matches active timetable if empty
+      // Ensure period is populated if empty (do not override manual selection)
       const periodSelect = document.getElementById('mark-period-select');
-      if (periodSelect && (!periodSelect.value || periodSelect.value === 'Period 1')) {
+      if (periodSelect && !periodSelect.value) {
         const curDate = dateInput ? dateInput.value : '';
         const autoPeriod = this.getAutoPeriodForTime(curDate, new Date());
         periodSelect.value = autoPeriod;
@@ -918,10 +984,14 @@
 
       // 1. Instant Render from LocalStorage Cache (Offline-First)
       const cachedRosters = this.getCachedRosters();
-      const hasCached = cachedRosters && cachedRosters[classId] && cachedRosters[classId].length > 0;
+      const cachedMeta = this.getCachedMetadata();
+      const cachedList = (cachedRosters && cachedRosters[classId])
+        || (cachedMeta && cachedMeta.allRosters && cachedMeta.allRosters[classId])
+        || null;
+      const hasCached = Array.isArray(cachedList) && cachedList.length > 0;
 
       if (hasCached) {
-        this.state.students = cachedRosters[classId];
+        this.state.students = cachedList.map(s => Object.assign({}, s));
         this.state.attendanceRecords = {};
         this.state.students.forEach(s => {
           const key = s.studentId || s.regNo;
@@ -929,13 +999,25 @@
         });
 
         this.renderMarkStudentTable();
-        const statusText = document.getElementById('mark-roster-status-text');
-        if (statusText) {
-          statusText.innerHTML = !navigator.onLine
-            ? '<span class="text-amber-600 font-semibold text-xs">📱 Loaded from device offline cache</span>'
-            : `<span class="text-slate-500 font-medium">${this.state.students.length} students loaded</span>`;
+        if (!navigator.onLine) {
+          const statusText = document.getElementById('mark-roster-status-text');
+          if (statusText) {
+            statusText.innerHTML += ' <span class="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded border border-amber-200">📱 Offline Cache</span>';
+          }
         }
         this.onMarkParameterChange();
+      } else if (!navigator.onLine) {
+        this.state.students = [];
+        this.state.attendanceRecords = {};
+        const container = document.getElementById('mark-student-list-container');
+        if (container) {
+          container.innerHTML = `<div class="p-8 text-center text-amber-600 font-medium text-xs sm:text-sm">⚡ Offline Mode: Student roster for this class is not in the device cache yet.</div>`;
+        }
+        const statusText = document.getElementById('mark-roster-status-text');
+        if (statusText) statusText.innerHTML = '<span class="text-amber-600 font-semibold">⚠️ Offline: Class roster not cached</span>';
+        this.updateMarkCounters();
+        this.onMarkParameterChange();
+        return;
       } else {
         const container = document.getElementById('mark-student-list-container');
         container.innerHTML = `<div class="p-8 text-center text-blue-600 font-medium text-xs sm:text-sm">Loading class roster...</div>`;
@@ -948,11 +1030,15 @@
         google.script.run
           .withSuccessHandler(students => {
             if (students && students.length > 0) {
-              this.state.students = students;
-              // Update local cache
+              // Update local cache regardless of whether user switched class
               const rosters = this.getCachedRosters();
               rosters[classId] = students;
               this.setCachedRosters(rosters);
+
+              const curClass = document.getElementById('mark-class-select') ? document.getElementById('mark-class-select').value : '';
+              if (curClass !== classId) return;
+
+              this.state.students = students;
 
               if (!hasCached) {
                 this.state.attendanceRecords = {};
@@ -966,12 +1052,30 @@
             }
           })
           .withFailureHandler(err => {
-            if (!hasCached) {
+            const curClass = document.getElementById('mark-class-select') ? document.getElementById('mark-class-select').value : '';
+            if (!hasCached && curClass === classId) {
+              const container = document.getElementById('mark-student-list-container');
+              if (container) {
+                container.innerHTML = `<div class="p-8 text-center text-rose-500 font-medium text-xs sm:text-sm">Unable to load students (connection lost).</div>`;
+              }
+              const statusText = document.getElementById('mark-roster-status-text');
+              if (statusText) statusText.textContent = 'Connection unavailable while loading roster.';
               this.showToast(`Error loading students: ${err}`, 'error');
             }
           })
           .getStudentsByClass(classId);
       }
+    },
+
+    resetMarkAttendanceToPresent(shouldRender = true) {
+      if (!this.state.students) return;
+      this.state.students = this.state.students.filter(s => !s.isInactive);
+      this.state.attendanceRecords = {};
+      this.state.students.forEach(s => {
+        const key = s.studentId || s.regNo;
+        this.state.attendanceRecords[key] = 'P';
+      });
+      if (shouldRender) this.renderMarkStudentTable();
     },
 
     onMarkParameterChange() {
@@ -982,11 +1086,16 @@
 
       if (!classId || !date || !period) {
         if (banner) banner.classList.add('hidden');
+        this.state.activeSessionKey = '';
         this.state.isExistingSession = false;
         this.state.existingSession = null;
         this.setSubmitButtonMode(false);
         return;
       }
+
+      const sessionKey = `${classId}|${date}|${period}`;
+      const isSameSessionContext = (this.state.activeSessionKey === sessionKey);
+      this.state.activeSessionKey = sessionKey;
 
       // Check Local Offline Queue First!
       const offlineQueue = this.getOfflineQueue();
@@ -1024,10 +1133,13 @@
         return;
       }
 
-      // If offline and not in queue, display offline ready banner
+      // If offline and not in queue: reset only when switching session context so unsaved taps survive network drops
       if (!navigator.onLine) {
-        this.state.isExistingSession = false;
-        this.state.existingSession = null;
+        if (!isSameSessionContext || this.state.isExistingSession) {
+          this.state.isExistingSession = false;
+          this.state.existingSession = null;
+          this.resetMarkAttendanceToPresent(true);
+        }
         if (banner) {
           banner.className = "mt-3.5 p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-center space-x-2";
           banner.innerHTML = `<span class="text-amber-600 font-bold text-sm">⚡</span><span class="font-medium">Offline Mode: Mark attendance as usual. It will be saved securely to this device.</span>`;
@@ -1035,6 +1147,13 @@
         }
         this.setSubmitButtonMode(false, true);
         return;
+      }
+
+      // When changing period/date or leaving a loaded existing session, reset cleanly before querying server
+      if (!isSameSessionContext || this.state.isExistingSession) {
+        this.state.isExistingSession = false;
+        this.state.existingSession = null;
+        this.resetMarkAttendanceToPresent(true);
       }
 
       if (banner) {
@@ -1091,17 +1210,9 @@
             this.setSubmitButtonMode(true, false);
             this.renderMarkStudentTable();
           } else {
-            // New Session: filter out inactive students so they don't appear in new attendance sessions
+            // New Session (active students already reset before lookup; preserve any taps made while checking)
             this.state.isExistingSession = false;
             this.state.existingSession = null;
-
-            if (this.state.students) {
-              this.state.students = this.state.students.filter(s => !s.isInactive);
-              this.state.students.forEach(s => {
-                const key = s.studentId || s.regNo;
-                this.state.attendanceRecords[key] = 'P';
-              });
-            }
 
             if (banner) {
               banner.className = "mt-3.5 p-3 sm:p-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs sm:text-sm";
@@ -1115,10 +1226,15 @@
             }
 
             this.setSubmitButtonMode(false, false);
-            this.renderMarkStudentTable();
           }
         })
         .withFailureHandler(err => {
+          const curClass = document.getElementById('mark-class-select') ? document.getElementById('mark-class-select').value : '';
+          const curDate = document.getElementById('mark-date-input') ? document.getElementById('mark-date-input').value : '';
+          const curPeriod = document.getElementById('mark-period-select') ? document.getElementById('mark-period-select').value : '';
+          if (curClass !== classId || curDate !== date || curPeriod !== period) {
+            return;
+          }
           if (banner) {
             banner.className = "mt-3.5 p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-center space-x-2";
             banner.innerHTML = `<span class="text-amber-600 font-bold text-sm">⚡</span><span class="font-medium">Offline/Unreachable: Attendance will be saved to this device's local queue.</span>`;
@@ -1160,8 +1276,46 @@
       }
     },
 
+    updateMarkUnselectedStatus() {
+      const statusText = document.getElementById('mark-roster-status-text');
+      if (!statusText) return;
+      const activeClasses = (this.state.classes || []).filter(c => c.status !== 'Archived');
+      const cachedRosters = this.getCachedRosters() || {};
+      const cachedMeta = this.getCachedMetadata();
+      const metaRosters = (cachedMeta && cachedMeta.allRosters) ? cachedMeta.allRosters : {};
+
+      let cachedClassCount = 0;
+      let cachedStudentCount = 0;
+      activeClasses.forEach(c => {
+        const list = cachedRosters[c.classId] || metaRosters[c.classId];
+        if (Array.isArray(list) && list.length > 0) {
+          cachedClassCount++;
+          cachedStudentCount += list.length;
+        }
+      });
+
+      if (cachedClassCount > 0) {
+        if (!navigator.onLine) {
+          statusText.innerHTML = `<span class="text-amber-700 font-semibold">⚡ Offline Ready: ${cachedClassCount}/${activeClasses.length} classes (${cachedStudentCount} students) cached on device. Select a class above.</span>`;
+        } else {
+          statusText.innerHTML = `Select a class above &bull; <span class="text-emerald-700 font-semibold">${cachedClassCount}/${activeClasses.length} classes (${cachedStudentCount} students) ready offline</span>`;
+        }
+      } else {
+        statusText.textContent = 'Select a class above to load enrolled students.';
+      }
+    },
+
     renderMarkStudentTable(filterQuery = '') {
       const container = document.getElementById('mark-student-list-container');
+      const markSelect = document.getElementById('mark-class-select');
+      const selectedClassId = markSelect ? markSelect.value : '';
+      if (!selectedClassId) {
+        container.innerHTML = `<div class="p-8 text-center text-slate-400 text-xs sm:text-sm">👈 Please select a class above to take attendance.</div>`;
+        this.updateMarkCounters();
+        this.updateMarkUnselectedStatus();
+        return;
+      }
+
       if (!this.state.students || this.state.students.length === 0) {
         container.innerHTML = `<div class="p-8 text-center text-slate-400 text-xs sm:text-sm">No students enrolled in this class.</div>`;
         this.updateMarkCounters();
@@ -2013,6 +2167,17 @@
       if (!classId) return;
       const listContainer = document.getElementById('roster-manager-list');
       const countBadge = document.getElementById('roster-manager-count');
+      const cachedRosters = this.getCachedRosters() || {};
+      const cachedMeta = this.getCachedMetadata();
+      const fallbackStudents = cachedRosters[classId] || (cachedMeta && cachedMeta.allRosters && cachedMeta.allRosters[classId]) || null;
+
+      if (!navigator.onLine && Array.isArray(fallbackStudents)) {
+        this.state.rosterStudents = fallbackStudents;
+        if (countBadge) countBadge.textContent = `${this.state.rosterStudents.length} students (Offline Cache)`;
+        this.renderRosterManagerTable();
+        return;
+      }
+
       listContainer.innerHTML = `<div class="p-8 text-center text-blue-600 font-medium text-xs sm:text-sm">Loading class roster...</div>`;
       if (countBadge) countBadge.textContent = 'Loading...';
 
@@ -2023,7 +2188,14 @@
           this.renderRosterManagerTable();
         })
         .withFailureHandler(err => {
-          listContainer.innerHTML = `<div class="p-6 text-center text-rose-500 text-xs">Error loading roster: ${err}</div>`;
+          if (Array.isArray(fallbackStudents)) {
+            this.state.rosterStudents = fallbackStudents;
+            if (countBadge) countBadge.textContent = `${this.state.rosterStudents.length} students (Offline Cache)`;
+            this.renderRosterManagerTable();
+            this.showToast("Offline: Showing cached student list.", "warning");
+          } else {
+            listContainer.innerHTML = `<div class="p-6 text-center text-rose-500 text-xs">Error loading roster: ${err}</div>`;
+          }
         })
         .getStudentsByClass(classId, true);
     },
@@ -3379,6 +3551,10 @@
         }
       }
 
+      const markSelect = document.getElementById('mark-class-select');
+      if (!markSelect || !markSelect.value) {
+        this.updateMarkUnselectedStatus();
+      }
       this.renderOfflineQueueList();
     },
 
