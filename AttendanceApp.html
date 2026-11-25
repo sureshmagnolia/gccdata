@@ -57,6 +57,19 @@
       transition: transform 0.08s ease-in-out;
     }
 
+    /* Make native datepicker indicator cover 100% of the date box so clicking anywhere triggers popup */
+    #mark-date-input::-webkit-calendar-picker-indicator {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
     /* Large Touch Status Buttons */
     .status-btn {
       min-width: 42px;
@@ -468,7 +481,7 @@
                   title="Next Day">▶</button>
               </div>
             </div>
-            <div class="relative cursor-pointer group">
+            <div class="relative cursor-pointer group" onclick="app.openDatePicker(event)">
               <div class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl flex items-center justify-between group-hover:bg-white group-hover:border-blue-400 transition font-medium shadow-sm">
                 <div class="flex items-center space-x-2">
                   <svg class="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -477,15 +490,16 @@
                   <span id="mark-date-display" class="font-mono font-bold text-slate-900 text-sm tracking-wide">--/--/--</span>
                   <span id="mark-date-day-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase flex-shrink-0">--</span>
                 </div>
-                <div class="flex items-center space-x-1 text-slate-400">
-                  <span class="text-[10px] text-slate-400 font-normal hidden sm:inline">Change</span>
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button type="button" onclick="app.openDatePicker(event)"
+                  class="flex items-center space-x-1 px-2.5 py-1 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition">
+                  <span>Change</span>
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                   </svg>
-                </div>
+                </button>
               </div>
-              <!-- Native Date Input (Transparent overlay so clicking anywhere triggers native OS calendar) -->
-              <input type="date" id="mark-date-input" onchange="app.onMarkDateChange(this.value)"
+              <!-- Native Date Input (Transparent overlay with 100% calendar indicator coverage) -->
+              <input type="date" id="mark-date-input" onchange="app.onMarkDateChange(this.value)" onclick="app.openDatePicker(event)"
                 class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" aria-label="Select Date">
             </div>
           </div>

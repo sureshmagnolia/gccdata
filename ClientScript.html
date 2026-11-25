@@ -724,6 +724,23 @@
       this.onMarkParameterChange();
     },
 
+    openDatePicker(event) {
+      const input = document.getElementById('mark-date-input');
+      if (!input) return;
+      if (typeof input.showPicker === 'function') {
+        try {
+          input.showPicker();
+          if (event && event.target !== input) {
+            event.preventDefault();
+          }
+          return;
+        } catch (err) {
+          // Fall back to focus if showPicker throws
+        }
+      }
+      input.focus();
+    },
+
     setMarkDateToToday() {
       const today = new Date().toLocaleDateString('en-CA');
       const dateInput = document.getElementById('mark-date-input');
