@@ -754,8 +754,30 @@ function getAppMetadata(authToken) {
     }
   }
 
-  // 3. Get Configuration
-  const config = { minAttendance: 75, collegeName: "Attendance App", portalTitle: "Department Attendance Management" };
+  // 3. Get Configuration & Period Schedule
+  const DEFAULT_PERIOD_SCHEDULE = {
+    regular: [
+      { name: "Period 1", startTime: "10:00", endTime: "11:00" },
+      { name: "Period 2", startTime: "11:00", endTime: "12:00" },
+      { name: "Period 3", startTime: "12:00", endTime: "13:00" },
+      { name: "Period 4", startTime: "14:00", endTime: "15:00" },
+      { name: "Period 5", startTime: "15:00", endTime: "16:00" }
+    ],
+    friday: [
+      { name: "Period 1", startTime: "09:30", endTime: "10:30" },
+      { name: "Period 2", startTime: "10:30", endTime: "11:30" },
+      { name: "Period 3", startTime: "11:30", endTime: "12:30" },
+      { name: "Period 4", startTime: "14:00", endTime: "15:00" },
+      { name: "Period 5", startTime: "15:00", endTime: "16:00" }
+    ]
+  };
+
+  const config = {
+    minAttendance: 75,
+    collegeName: "Attendance App",
+    portalTitle: "Department Attendance Management",
+    periodSchedule: DEFAULT_PERIOD_SCHEDULE
+  };
   if (ss) {
     try {
       const configSheet = ss.getSheetByName(SHEET_CONFIG);
@@ -767,6 +789,16 @@ function getAppMetadata(authToken) {
           if (key === 'MIN_ATTENDANCE_PERCENT') config.minAttendance = parseFloat(val) || 75;
           if (key === 'COLLEGE_NAME') config.collegeName = val;
           if (key === 'PORTAL_TITLE') config.portalTitle = val;
+          if (key === 'PERIOD_SCHEDULE' && val) {
+            try {
+              const parsed = JSON.parse(val);
+              if (parsed && (parsed.regular || parsed.friday)) {
+                config.periodSchedule = parsed;
+              }
+            } catch (pErr) {
+              Logger.log("Error parsing stored PERIOD_SCHEDULE JSON: " + pErr);
+            }
+          }
         });
       }
     } catch (cfgErr) {}
@@ -2250,6 +2282,17 @@ function updateAppConfig(configData, authToken) {
   const minAttendance = (configData.minAttendance || '75').toString().trim();
   const collegeName = (configData.collegeName || 'Attendance App').trim();
   const portalTitle = (configData.portalTitle || 'Department Attendance Management').trim();
+  let periodScheduleStr = null;
+  let parsedSchedule = null;
+  if (configData.periodSchedule) {
+    if (typeof configData.periodSchedule === 'string') {
+      periodScheduleStr = configData.periodSchedule;
+      try { parsedSchedule = JSON.parse(periodScheduleStr); } catch (e) {}
+    } else {
+      parsedSchedule = configData.periodSchedule;
+      periodScheduleStr = JSON.stringify(configData.periodSchedule);
+    }
+  }
 
   const data = configSheet.getDataRange().getValues();
   const keyRowMap = new Map();
@@ -2263,6 +2306,9 @@ function updateAppConfig(configData, authToken) {
     { key: "COLLEGE_NAME", val: collegeName },
     { key: "PORTAL_TITLE", val: portalTitle }
   ];
+  if (periodScheduleStr) {
+    updates.push({ key: "PERIOD_SCHEDULE", val: periodScheduleStr });
+  }
 
   updates.forEach(u => {
     if (keyRowMap.has(u.key)) {
@@ -2278,7 +2324,8 @@ function updateAppConfig(configData, authToken) {
     config: {
       minAttendance: parseFloat(minAttendance) || 75,
       collegeName: collegeName,
-      portalTitle: portalTitle
+      portalTitle: portalTitle,
+      periodSchedule: parsedSchedule
     }
   };
 }

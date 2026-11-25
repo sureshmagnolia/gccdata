@@ -451,30 +451,56 @@
               <option value="" disabled selected>Select Class</option>
             </select>
           </div>
-          <!-- Date Picker with Quick Today Button -->
+          <!-- Date Selector with Guaranteed DD/MM/YY Display Irrespective of System/Browser Locale -->
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Date</label>
-              <button type="button" onclick="app.setMarkDateToToday()"
-                class="text-[10px] text-blue-600 hover:text-blue-800 font-bold px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 transition">
-                Today
-              </button>
+              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Date (DD/MM/YY)</label>
+              <div class="flex items-center space-x-1">
+                <button type="button" onclick="app.shiftMarkDate(-1)"
+                  class="text-[10px] text-slate-600 hover:text-slate-900 font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 transition"
+                  title="Previous Day">◀</button>
+                <button type="button" onclick="app.setMarkDateToToday()"
+                  class="text-[10px] text-blue-600 hover:text-blue-800 font-bold px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 transition">
+                  Today
+                </button>
+                <button type="button" onclick="app.shiftMarkDate(1)"
+                  class="text-[10px] text-slate-600 hover:text-slate-900 font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 transition"
+                  title="Next Day">▶</button>
+              </div>
             </div>
-            <input type="date" id="mark-date-input" onchange="app.onMarkParameterChange()"
-              class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
+            <div class="relative cursor-pointer group">
+              <div class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl flex items-center justify-between group-hover:bg-white group-hover:border-blue-400 transition font-medium shadow-sm">
+                <div class="flex items-center space-x-2">
+                  <svg class="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                  <span id="mark-date-display" class="font-mono font-bold text-slate-900 text-sm tracking-wide">--/--/--</span>
+                  <span id="mark-date-day-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase flex-shrink-0">--</span>
+                </div>
+                <div class="flex items-center space-x-1 text-slate-400">
+                  <span class="text-[10px] text-slate-400 font-normal hidden sm:inline">Change</span>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+              </div>
+              <!-- Native Date Input (Transparent overlay so clicking anywhere triggers native OS calendar) -->
+              <input type="date" id="mark-date-input" onchange="app.onMarkDateChange(this.value)"
+                class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" aria-label="Select Date">
+            </div>
           </div>
-          <!-- Period Select -->
+
+          <!-- Dynamic Period Selector with Timetable Timings & Auto-Detection -->
           <div>
-            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Period</label>
-            <select id="mark-period-select" onchange="app.onMarkParameterChange()"
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Period</label>
+              <span id="period-auto-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                ⚡ Auto-Time Active
+              </span>
+            </div>
+            <select id="mark-period-select" onchange="app.onMarkPeriodChange(this.value)"
               class="w-full p-2.5 sm:p-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition font-medium">
-              <option value="" disabled selected>Select Period</option>
-              <option value="Period 1">Period 1</option>
-              <option value="Period 2">Period 2</option>
-              <option value="Period 3">Period 3</option>
-              <option value="Period 4">Period 4</option>
-              <option value="Period 5">Period 5</option>
-              <option value="Period 6">Period 6</option>
+              <option value="" disabled selected>Loading Period Schedule...</option>
             </select>
           </div>
           <!-- Subject Input -->
@@ -1014,6 +1040,75 @@
                 Save Settings
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Class Period Timings & Timetable Schedule Card (Admin Only) -->
+      <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-base sm:text-lg">⏰</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-900">Period Timings & Schedule</h2>
+              <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700">Offline Supported</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Set start & end times for each period. The Period dropdown automatically defaults to the matching period based on time of day, even offline.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2 flex-shrink-0 w-full sm:w-auto justify-end">
+            <button type="button" onclick="app.resetPeriodScheduleToDefault()"
+              class="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+              Reset Standard
+            </button>
+            <button type="button" onclick="app.savePeriodSchedule()" id="save-period-schedule-btn"
+              class="px-4 py-2 bg-blue-600 active:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition shadow-sm flex items-center space-x-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span>Save Schedule</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Schedule Mode Switcher Tabs -->
+        <div class="flex border-b border-slate-200 mb-4 bg-slate-50 rounded-xl p-1 gap-1">
+          <button type="button" id="tab-btn-schedule-regular" onclick="app.switchScheduleTab('regular')"
+            class="flex-1 py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-white text-blue-700 shadow-sm transition flex items-center justify-center space-x-1.5 border border-slate-200">
+            <span>📅 Regular Timetable (Mon – Thu, Sat)</span>
+          </button>
+          <button type="button" id="tab-btn-schedule-friday" onclick="app.switchScheduleTab('friday')"
+            class="flex-1 py-2 px-3 text-xs sm:text-sm font-bold rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center space-x-1.5">
+            <span>🕌 Friday Schedule (Special Timings)</span>
+          </button>
+        </div>
+
+        <!-- Regular Schedule Editor -->
+        <div id="schedule-panel-regular" class="space-y-3">
+          <div class="flex items-center justify-between text-xs text-slate-600 bg-blue-50/70 border border-blue-200/80 p-2.5 rounded-xl">
+            <span>Standard timetable applied Monday through Thursday and Saturday.</span>
+            <button type="button" onclick="app.addPeriodRow('regular')"
+              class="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-2.5 py-1 rounded-lg shadow-xs hover:bg-blue-50 transition">
+              + Add Period
+            </button>
+          </div>
+          <div id="regular-periods-list" class="space-y-2">
+            <!-- Dynamically populated rows -->
+          </div>
+        </div>
+
+        <!-- Friday Schedule Editor -->
+        <div id="schedule-panel-friday" class="space-y-3 hidden">
+          <div class="flex items-center justify-between text-xs text-emerald-800 bg-emerald-50/70 border border-emerald-200/80 p-2.5 rounded-xl">
+            <span>Special timetable applied automatically when the selected attendance date is Friday.</span>
+            <button type="button" onclick="app.addPeriodRow('friday')"
+              class="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-white border border-emerald-200 px-2.5 py-1 rounded-lg shadow-xs hover:bg-emerald-50 transition">
+              + Add Period
+            </button>
+          </div>
+          <div id="friday-periods-list" class="space-y-2">
+            <!-- Dynamically populated Friday rows -->
           </div>
         </div>
       </div>
@@ -1658,6 +1753,24 @@
     });
   }
 
+  // Default Period Timings Schedule (Fallback & Initial Preset)
+  const DEFAULT_PERIOD_SCHEDULE = {
+    regular: [
+      { name: "Period 1", startTime: "10:00", endTime: "11:00" },
+      { name: "Period 2", startTime: "11:00", endTime: "12:00" },
+      { name: "Period 3", startTime: "12:00", endTime: "13:00" },
+      { name: "Period 4", startTime: "14:00", endTime: "15:00" },
+      { name: "Period 5", startTime: "15:00", endTime: "16:00" }
+    ],
+    friday: [
+      { name: "Period 1", startTime: "09:30", endTime: "10:30" },
+      { name: "Period 2", startTime: "10:30", endTime: "11:30" },
+      { name: "Period 3", startTime: "11:30", endTime: "12:30" },
+      { name: "Period 4", startTime: "14:00", endTime: "15:00" },
+      { name: "Period 5", startTime: "15:00", endTime: "16:00" }
+    ]
+  };
+
   const app = {
     // Global Application State
     state: {
@@ -1665,6 +1778,9 @@
       classes: [],
       faculty: [],
       config: {},
+      periodSchedule: null,
+      manualPeriodSelected: false,
+      scheduleActiveTab: 'regular',
       currentTab: 'mark',
       students: [],
       attendanceRecords: {}, // regNo -> status (P/A/L)
@@ -1685,13 +1801,20 @@
       const reportToDate = document.getElementById('report-to-date');
       const reportFromDate = document.getElementById('report-from-date');
 
-      if (dateInput) dateInput.value = today;
+      if (dateInput) {
+        dateInput.value = today;
+        this.updateDateDisplay(today);
+      }
       if (reportToDate) reportToDate.value = today;
       if (reportFromDate && !reportFromDate.value) {
         const d = new Date();
         d.setDate(1); // Default to first day of current month
         reportFromDate.value = d.toLocaleDateString('en-CA');
       }
+
+      // Initial period options and real-time clock ticker
+      this.renderPeriodOptions(today, true);
+      this.startPeriodClock();
 
       // Bind Online / Offline Network Listeners for Auto-Sync
       window.addEventListener('online', () => this.handleNetworkStatusChange(true));
@@ -1895,6 +2018,14 @@
       if (cInput) cInput.value = cfg.collegeName || '';
       if (pInput) pInput.value = cfg.portalTitle || '';
       if (mInput) mInput.value = cfg.minAttendance || 75;
+
+      // Update Period Timetable & Date Display
+      const curDate = document.getElementById('mark-date-input') ? document.getElementById('mark-date-input').value : new Date().toLocaleDateString('en-CA');
+      this.updateDateDisplay(curDate);
+      this.renderPeriodOptions(curDate, true);
+      if (data.user && data.user.role === 'Admin') {
+        this.renderPeriodScheduleEditor();
+      }
 
       // Populate Class Dropdowns
       this.populateClassDropdowns();
@@ -2222,13 +2353,207 @@
        TAB 1: UNIFIED MARK & EDIT ATTENDANCE (TOUCH & MOBILE FIRST)
        ========================================================== */
 
+    formatDateToDDMMYY(isoDate) {
+      if (!isoDate) return '--/--/--';
+      const parts = isoDate.split('-');
+      if (parts.length === 3) {
+        const yy = parts[0].slice(-2);
+        const mm = parts[1].padStart(2, '0');
+        const dd = parts[2].padStart(2, '0');
+        return `${dd}/${mm}/${yy}`;
+      }
+      return isoDate;
+    },
+
+    getDayName(isoDate) {
+      if (!isoDate) return '';
+      const [y, m, d] = isoDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      return days[dt.getDay()] || '';
+    },
+
+    formatTime12h(timeStr) {
+      if (!timeStr) return '';
+      const [hStr, mStr] = timeStr.split(':');
+      let h = parseInt(hStr, 10);
+      const m = mStr || '00';
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12;
+      if (h === 0) h = 12;
+      return `${h.toString().padStart(2, '0')}:${m} ${ampm}`;
+    },
+
+    updateDateDisplay(isoDate) {
+      const display = document.getElementById('mark-date-display');
+      const dayBadge = document.getElementById('mark-date-day-badge');
+      if (display) display.textContent = this.formatDateToDDMMYY(isoDate);
+      if (dayBadge) {
+        const dayName = this.getDayName(isoDate);
+        dayBadge.textContent = dayName;
+        if (dayName === 'FRI') {
+          dayBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase flex-shrink-0';
+        } else {
+          dayBadge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase flex-shrink-0';
+        }
+      }
+    },
+
+    onMarkDateChange(newIsoDate) {
+      if (!newIsoDate) return;
+      this.updateDateDisplay(newIsoDate);
+      // When date changes, update period options (Friday vs Regular) and re-evaluate auto-period
+      this.renderPeriodOptions(newIsoDate, true);
+      this.onMarkParameterChange();
+    },
+
     setMarkDateToToday() {
       const today = new Date().toLocaleDateString('en-CA');
       const dateInput = document.getElementById('mark-date-input');
       if (dateInput) {
         dateInput.value = today;
-        this.onMarkParameterChange();
+        this.onMarkDateChange(today);
       }
+    },
+
+    shiftMarkDate(daysDelta) {
+      const input = document.getElementById('mark-date-input');
+      const currentVal = input && input.value ? input.value : new Date().toLocaleDateString('en-CA');
+      const [y, m, d] = currentVal.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + daysDelta);
+      const newIso = dt.toLocaleDateString('en-CA');
+      if (input) {
+        input.value = newIso;
+        this.onMarkDateChange(newIso);
+      }
+    },
+
+    getPeriodSchedule() {
+      if (this.state.config && this.state.config.periodSchedule && (this.state.config.periodSchedule.regular || this.state.config.periodSchedule.friday)) {
+        return this.state.config.periodSchedule;
+      }
+      return DEFAULT_PERIOD_SCHEDULE;
+    },
+
+    getScheduleForDate(isoDate) {
+      const schedule = this.getPeriodSchedule();
+      if (!isoDate) return schedule.regular || DEFAULT_PERIOD_SCHEDULE.regular;
+      const [y, m, d] = isoDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const isFriday = dt.getDay() === 5;
+      if (isFriday && schedule.friday && schedule.friday.length > 0) {
+        return schedule.friday;
+      }
+      return schedule.regular || DEFAULT_PERIOD_SCHEDULE.regular;
+    },
+
+    getAutoPeriodForTime(isoDate, currentTime = new Date()) {
+      const periods = this.getScheduleForDate(isoDate);
+      if (!periods || periods.length === 0) return 'Period 1';
+
+      // Minutes from midnight on device clock
+      const curMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+
+      // 1. Check if current time falls within any period
+      for (let i = 0; i < periods.length; i++) {
+        const p = periods[i];
+        const [sh, sm] = (p.startTime || '00:00').split(':').map(Number);
+        const [eh, em] = (p.endTime || '00:00').split(':').map(Number);
+        const startM = (sh || 0) * 60 + (sm || 0);
+        const endM = (eh || 0) * 60 + (em || 0);
+
+        if (curMinutes >= startM && curMinutes < endM) {
+          return p.name;
+        }
+      }
+
+      // 2. If before the first period, default to first period
+      const [fsh, fsm] = (periods[0].startTime || '00:00').split(':').map(Number);
+      const firstStartM = (fsh || 0) * 60 + (fsm || 0);
+      if (curMinutes < firstStartM) {
+        return periods[0].name;
+      }
+
+      // 3. If between periods (e.g. interval / lunch), pick upcoming period
+      for (let i = 0; i < periods.length; i++) {
+        const p = periods[i];
+        const [sh, sm] = (p.startTime || '00:00').split(':').map(Number);
+        const startM = (sh || 0) * 60 + (sm || 0);
+        if (curMinutes < startM) {
+          return p.name;
+        }
+      }
+
+      // 4. If after all periods, default to last period of the day
+      return periods[periods.length - 1].name;
+    },
+
+    renderPeriodOptions(selectedDate, autoSelect = false) {
+      const periodSelect = document.getElementById('mark-period-select');
+      if (!periodSelect) return;
+
+      const periods = this.getScheduleForDate(selectedDate);
+      const [y, m, d] = (selectedDate || '').split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const isFriday = dt.getDay() === 5;
+
+      const autoBadge = document.getElementById('period-auto-badge');
+      if (autoBadge) {
+        autoBadge.textContent = isFriday ? '🕌 Friday Schedule' : '⚡ Auto-Time Active';
+        autoBadge.className = isFriday
+          ? 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300'
+          : 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200';
+      }
+
+      const prevValue = periodSelect.value;
+      let html = '<option value="" disabled>Select Period</option>';
+
+      periods.forEach(p => {
+        const timeLabel = (p.startTime && p.endTime)
+          ? ` (${this.formatTime12h(p.startTime)} – ${this.formatTime12h(p.endTime)})`
+          : '';
+        html += `<option value="${p.name}">${p.name}${timeLabel}</option>`;
+      });
+
+      periodSelect.innerHTML = html;
+
+      // Decide selection
+      const todayIso = new Date().toLocaleDateString('en-CA');
+      const isToday = selectedDate === todayIso;
+
+      if (autoSelect || !prevValue || isToday) {
+        const targetPeriod = this.getAutoPeriodForTime(selectedDate, new Date());
+        periodSelect.value = targetPeriod;
+      } else if (periods.some(p => p.name === prevValue)) {
+        periodSelect.value = prevValue;
+      } else {
+        periodSelect.value = periods[0] ? periods[0].name : 'Period 1';
+      }
+    },
+
+    onMarkPeriodChange(newPeriod) {
+      this.state.manualPeriodSelected = true;
+      this.onMarkParameterChange();
+    },
+
+    startPeriodClock() {
+      // Runs every 60 seconds to auto-update the period dropdown if viewing today and user hasn't manually overridden
+      setInterval(() => {
+        const dateInput = document.getElementById('mark-date-input');
+        const periodSelect = document.getElementById('mark-period-select');
+        if (!dateInput || !periodSelect) return;
+
+        const todayIso = new Date().toLocaleDateString('en-CA');
+        if (dateInput.value === todayIso && !this.state.manualPeriodSelected) {
+          const autoPeriod = this.getAutoPeriodForTime(todayIso, new Date());
+          if (periodSelect.value !== autoPeriod) {
+            periodSelect.value = autoPeriod;
+            this.onMarkParameterChange();
+            console.log(`⏰ Period auto-updated to ${autoPeriod} based on device time.`);
+          }
+        }
+      }, 60000);
     },
 
     onMarkClassChange(classId) {
@@ -2244,13 +2569,17 @@
       // Ensure date is set to today if empty
       const dateInput = document.getElementById('mark-date-input');
       if (dateInput && !dateInput.value) {
-        dateInput.value = new Date().toLocaleDateString('en-CA');
+        const todayIso = new Date().toLocaleDateString('en-CA');
+        dateInput.value = todayIso;
+        this.updateDateDisplay(todayIso);
       }
 
-      // Ensure period defaults to Period 1 if empty
+      // Ensure period matches active timetable if empty
       const periodSelect = document.getElementById('mark-period-select');
-      if (periodSelect && !periodSelect.value) {
-        periodSelect.value = 'Period 1';
+      if (periodSelect && (!periodSelect.value || periodSelect.value === 'Period 1')) {
+        const curDate = dateInput ? dateInput.value : '';
+        const autoPeriod = this.getAutoPeriodForTime(curDate, new Date());
+        periodSelect.value = autoPeriod;
       }
 
       // 1. Instant Render from LocalStorage Cache (Offline-First)
@@ -4100,7 +4429,195 @@
           btn.textContent = "Save Settings";
           this.showToast(`Error saving settings: ${err}`, "error");
         })
-        .updateAppConfig({ collegeName, portalTitle, minAttendance });
+        .updateAppConfig({ collegeName, portalTitle, minAttendance, authToken: this.getAuthToken() }, this.getAuthToken());
+    },
+
+    /* ==========================================================
+       PERIOD TIMETABLE & SCHEDULE MANAGEMENT (ADMIN ONLY)
+       ========================================================== */
+
+    switchScheduleTab(tab) {
+      this.state.scheduleActiveTab = tab;
+      const regBtn = document.getElementById('tab-btn-schedule-regular');
+      const friBtn = document.getElementById('tab-btn-schedule-friday');
+      const regPanel = document.getElementById('schedule-panel-regular');
+      const friPanel = document.getElementById('schedule-panel-friday');
+
+      if (tab === 'regular') {
+        if (regBtn) {
+          regBtn.className = "flex-1 py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-white text-blue-700 shadow-sm transition flex items-center justify-center space-x-1.5 border border-slate-200";
+        }
+        if (friBtn) {
+          friBtn.className = "flex-1 py-2 px-3 text-xs sm:text-sm font-bold rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center space-x-1.5";
+        }
+        if (regPanel) regPanel.classList.remove('hidden');
+        if (friPanel) friPanel.classList.add('hidden');
+      } else {
+        if (friBtn) {
+          friBtn.className = "flex-1 py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-white text-emerald-800 shadow-sm transition flex items-center justify-center space-x-1.5 border border-slate-200";
+        }
+        if (regBtn) {
+          regBtn.className = "flex-1 py-2 px-3 text-xs sm:text-sm font-bold rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center space-x-1.5";
+        }
+        if (friPanel) friPanel.classList.remove('hidden');
+        if (regPanel) regPanel.classList.add('hidden');
+      }
+    },
+
+    renderPeriodScheduleEditor() {
+      const schedule = this.getPeriodSchedule();
+      const regContainer = document.getElementById('regular-periods-list');
+      const friContainer = document.getElementById('friday-periods-list');
+
+      if (regContainer) {
+        regContainer.innerHTML = '';
+        const regList = (schedule.regular && schedule.regular.length > 0) ? schedule.regular : DEFAULT_PERIOD_SCHEDULE.regular;
+        regList.forEach(p => {
+          regContainer.appendChild(this.createPeriodRowElement('regular', p.name, p.startTime, p.endTime));
+        });
+      }
+
+      if (friContainer) {
+        friContainer.innerHTML = '';
+        const friList = (schedule.friday && schedule.friday.length > 0) ? schedule.friday : DEFAULT_PERIOD_SCHEDULE.friday;
+        friList.forEach(p => {
+          friContainer.appendChild(this.createPeriodRowElement('friday', p.name, p.startTime, p.endTime));
+        });
+      }
+    },
+
+    createPeriodRowElement(type, name, start, end) {
+      const row = document.createElement('div');
+      row.className = 'period-row flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-white transition flex-wrap sm:flex-nowrap';
+      row.innerHTML = `
+        <div class="flex items-center space-x-2 flex-1 min-w-[130px]">
+          <span class="text-xs font-bold text-slate-400">#</span>
+          <input type="text" class="period-name-input w-full p-2 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            value="${name || 'Period'}" placeholder="Period Name (e.g. Period 1)">
+        </div>
+        <div class="flex items-center space-x-2">
+          <div class="flex items-center space-x-1">
+            <span class="text-[10px] font-bold text-slate-400">START:</span>
+            <input type="time" class="period-start-input p-2 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value="${start || '10:00'}">
+          </div>
+          <span class="text-slate-400 text-xs font-bold">—</span>
+          <div class="flex items-center space-x-1">
+            <span class="text-[10px] font-bold text-slate-400">END:</span>
+            <input type="time" class="period-end-input p-2 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value="${end || '11:00'}">
+          </div>
+          <button type="button" onclick="this.closest('.period-row').remove()"
+            class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Delete Period">
+            ✕
+          </button>
+        </div>
+      `;
+      return row;
+    },
+
+    addPeriodRow(type) {
+      const container = document.getElementById(type === 'regular' ? 'regular-periods-list' : 'friday-periods-list');
+      if (!container) return;
+      const count = container.querySelectorAll('.period-row').length + 1;
+      const row = this.createPeriodRowElement(type, `Period ${count}`, '10:00', '11:00');
+      container.appendChild(row);
+    },
+
+    savePeriodSchedule() {
+      const regRows = document.querySelectorAll('#regular-periods-list .period-row');
+      const friRows = document.querySelectorAll('#friday-periods-list .period-row');
+
+      const regular = [];
+      regRows.forEach(r => {
+        const name = (r.querySelector('.period-name-input').value || '').trim();
+        const startTime = r.querySelector('.period-start-input').value;
+        const endTime = r.querySelector('.period-end-input').value;
+        if (name && startTime && endTime) {
+          regular.push({ name, startTime, endTime });
+        }
+      });
+
+      const friday = [];
+      friRows.forEach(r => {
+        const name = (r.querySelector('.period-name-input').value || '').trim();
+        const startTime = r.querySelector('.period-start-input').value;
+        const endTime = r.querySelector('.period-end-input').value;
+        if (name && startTime && endTime) {
+          friday.push({ name, startTime, endTime });
+        }
+      });
+
+      if (regular.length === 0) {
+        this.showToast("Please define at least one period for regular timetable.", "error");
+        return;
+      }
+
+      const periodSchedule = {
+        regular,
+        friday: friday.length > 0 ? friday : regular
+      };
+
+      const btn = document.getElementById('save-period-schedule-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>Saving...</span>';
+      }
+
+      const collegeName = (this.state.config && this.state.config.collegeName) || 'Attendance App';
+      const portalTitle = (this.state.config && this.state.config.portalTitle) || 'Department Attendance Management';
+      const minAttendance = (this.state.config && this.state.config.minAttendance) || 75;
+
+      google.script.run
+        .withSuccessHandler(res => {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span>Save Schedule</span>
+            `;
+          }
+          if (res && res.success) {
+            this.state.config.periodSchedule = periodSchedule;
+            // Update local cache so it works offline immediately
+            const cached = this.getCachedMetadata() || {};
+            cached.config = cached.config || {};
+            cached.config.periodSchedule = periodSchedule;
+            this.setCachedMetadata(cached);
+
+            // Re-render Period options in Mark tab
+            const curDate = document.getElementById('mark-date-input') ? document.getElementById('mark-date-input').value : '';
+            this.renderPeriodOptions(curDate, true);
+            this.showToast("🎉 Period Timetable Schedule saved successfully!", "success");
+          } else {
+            this.showToast((res && res.message) || "Error saving schedule.", "error");
+          }
+        })
+        .withFailureHandler(err => {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span>Save Schedule</span>';
+          }
+          this.showToast(`Error saving period schedule: ${err}`, "error");
+        })
+        .updateAppConfig({
+          collegeName,
+          portalTitle,
+          minAttendance,
+          periodSchedule,
+          authToken: this.getAuthToken()
+        }, this.getAuthToken());
+    },
+
+    resetPeriodScheduleToDefault() {
+      if (confirm("Reset timetable schedule to standard college timings (Period 1 to Period 5, including special Friday timings)?")) {
+        this.state.config.periodSchedule = JSON.parse(JSON.stringify(DEFAULT_PERIOD_SCHEDULE));
+        this.renderPeriodScheduleEditor();
+        this.savePeriodSchedule();
+      }
+    },
     },
 
     /* ==========================================================
