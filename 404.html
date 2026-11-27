@@ -1742,9 +1742,13 @@
         const success = this._successHandler;
         const failure = this._failureHandler;
         
+        const token = (typeof app !== 'undefined' && typeof app.getAuthToken === 'function')
+          ? app.getAuthToken()
+          : '';
         const payload = {
           action: method,
-          args: args
+          args: args,
+          authToken: token
         };
 
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -3853,7 +3857,7 @@
           btn.innerHTML = `<span>Commit & Save Roster</span>`;
           this.showToast(`Error saving roster: ${err}`, 'error');
         })
-        .importClassRoster(customName, this.state.parsedImportStudents);
+        .importClassRoster(customName, this.state.parsedImportStudents, this.getAuthToken());
     },
 
     /* ==========================================================
@@ -3881,6 +3885,15 @@
       google.script.run
         .withSuccessHandler(students => {
           this.state.rosterStudents = students || [];
+          const activeOnly = this.state.rosterStudents.filter(s => !s.isInactive);
+          const rosters = this.getCachedRosters() || {};
+          rosters[classId] = activeOnly;
+          this.setCachedRosters(rosters);
+          const cachedMeta = this.getCachedMetadata();
+          if (cachedMeta && cachedMeta.allRosters) {
+            cachedMeta.allRosters[classId] = activeOnly;
+            this.setCachedMetadata(cachedMeta);
+          }
           if (countBadge) countBadge.textContent = `${this.state.rosterStudents.length} students`;
           this.renderRosterManagerTable();
         })
@@ -4039,7 +4052,7 @@
           btn.innerHTML = `<span>Add Student</span>`;
           this.showToast(`Error adding student: ${err}`, "error");
         })
-        .addNewStudent(classId, regNo, name, rollNo, department);
+        .addNewStudent(classId, regNo, name, rollNo, department, this.getAuthToken());
     },
 
     confirmRemoveStudent(studentId, name, regNo) {
@@ -4077,7 +4090,7 @@
         .withFailureHandler(err => {
           this.showToast(`Error removing student: ${err}`, "error");
         })
-        .removeStudent(studentId, classId);
+        .removeStudent(studentId, classId, this.getAuthToken());
     },
 
     reactivateStudent(studentId, name, regNo) {
@@ -4106,7 +4119,7 @@
         .withFailureHandler(err => {
           this.showToast(`Error reactivating student: ${err}`, "error");
         })
-        .reactivateStudent(studentId, classId);
+        .reactivateStudent(studentId, classId, this.getAuthToken());
     },
 
     /* ==========================================================
@@ -4338,7 +4351,7 @@
           btn.innerHTML = `<span>Apply Bulk Changes</span>`;
           this.showToast(`Error updating roster: ${err}`, "error");
         })
-        .bulkUpdateStudentRoster(classId, list);
+        .bulkUpdateStudentRoster(classId, list, this.getAuthToken());
     },
 
     openEditStudentModal(studentId) {
@@ -4411,6 +4424,11 @@
             if (this.state.editStudents) this.state.editStudents.forEach(updateRecord);
             if (this.state.rosterStudents) this.state.rosterStudents.forEach(updateRecord);
             if (this.state.promoteStudents) this.state.promoteStudents.forEach(updateRecord);
+            const cachedRosters = this.getCachedRosters() || {};
+            Object.keys(cachedRosters).forEach(cid => {
+              if (Array.isArray(cachedRosters[cid])) cachedRosters[cid].forEach(updateRecord);
+            });
+            this.setCachedRosters(cachedRosters);
 
             // Re-render whichever tables are currently mounted
             if (this.state.currentTab === 'mark') {
@@ -4433,7 +4451,7 @@
           btn.innerHTML = `<span>Save Changes</span>`;
           this.showToast(`Error saving student details: ${err}`, "error");
         })
-        .updateStudentDetails(studentId, newRegNo, newName, newRollNo, newDepartment);
+        .updateStudentDetails(studentId, newRegNo, newName, newRollNo, newDepartment, this.getAuthToken());
     },
 
     /* ==========================================================
@@ -4978,7 +4996,7 @@
                 document.getElementById('promote-target-name').value = '';
                 document.getElementById('promote-source-class').value = '';
               })
-              .getAppMetadata();
+              .getAppMetadata(this.getAuthToken());
           } else {
             this.showToast(res.message, "error");
           }
@@ -5060,7 +5078,7 @@
                 this.onMetadataLoaded(data);
                 document.getElementById('clear-class-select').value = '';
               })
-              .getAppMetadata();
+              .getAppMetadata(this.getAuthToken());
           } else {
             this.showToast(res.message, "error");
           }
@@ -5070,7 +5088,7 @@
           btn.innerHTML = `<span>Permanently Delete</span>`;
           this.showToast(`Error clearing data: ${err}`, "error");
         })
-        .clearClassAttendanceData(classId, purgeMode);
+        .clearClassAttendanceData(classId, purgeMode, this.getAuthToken());
     },
 
     /* ==========================================================

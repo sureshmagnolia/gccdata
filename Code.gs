@@ -176,27 +176,27 @@ function handleApiRequest(action, payload) {
         break;
 
       case 'addNewStudent':
-        result = addNewStudent(args[0], args[1], args[2], args[3], args[4]);
+        result = addNewStudent(args[0], args[1], args[2], args[3], args[4], args[5] || payload.authToken);
         break;
 
       case 'updateStudentDetails':
-        result = updateStudentDetails(args[0], args[1], args[2], args[3], args[4]);
+        result = updateStudentDetails(args[0], args[1], args[2], args[3], args[4], args[5] || payload.authToken);
         break;
 
       case 'reactivateStudent':
-        result = reactivateStudent(args[0], args[1]);
+        result = reactivateStudent(args[0], args[1], args[2] || payload.authToken);
         break;
 
       case 'removeStudent':
-        result = removeStudent(args[0], args[1]);
+        result = removeStudent(args[0], args[1], args[2] || payload.authToken);
         break;
 
       case 'bulkUpdateStudentRoster':
-        result = bulkUpdateStudentRoster(args[0], args[1]);
+        result = bulkUpdateStudentRoster(args[0], args[1], args[2] || payload.authToken);
         break;
 
       case 'importClassRoster':
-        result = importClassRoster(args[0], args[1]);
+        result = importClassRoster(args[0], args[1], args[2] || payload.authToken);
         break;
 
       case 'promoteBatch':

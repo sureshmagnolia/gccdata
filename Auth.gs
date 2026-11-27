@@ -117,6 +117,20 @@ function validateUserToken(token) {
         }
       }
     }
+
+    // Fail-safe check if token belongs to Spreadsheet Owner
+    try {
+      const ss = getSpreadsheet();
+      const owner = ss.getOwner();
+      if (owner && cleanEmail(owner.getEmail()) === clean) {
+        return {
+          isAuthorized: true,
+          email: clean,
+          name: "Administrator",
+          role: "Admin"
+        };
+      }
+    } catch (ownerErr) {}
   } catch (e) {
     Logger.log("Token validation exception: " + e.toString());
   }

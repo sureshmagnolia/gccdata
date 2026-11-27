@@ -522,9 +522,101 @@ const CANONICAL_ROSTER = [
 ];
 
 /**
+ * Parses a row from the Students sheet supporting both 7-column and legacy 5-column schemas.
+ * @param {Array} r Row values
+ * @returns {Object} Normalized student fields and 1-based column indices
+ */
+function parseStudentSheetRow(r) {
+  const col0 = r[0] ? r[0].toString().trim() : '';
+  const isSevenCol = col0.startsWith('STU_');
+  const regNo = (isSevenCol ? (r[1] || '') : col0).toString().trim();
+  const studentId = isSevenCol ? col0 : ('STU_' + regNo.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+  const name = (isSevenCol ? (r[2] || '') : (r[1] || '')).toString().trim();
+  const classId = (isSevenCol ? (r[3] || '') : (r[2] || '')).toString().trim();
+  let rollNo = isSevenCol
+    ? (r[4] !== undefined && r[4] !== null ? r[4].toString().trim() : '')
+    : (r[3] !== undefined && r[3] !== null ? r[3].toString().trim() : '');
+  const status = (isSevenCol ? (r[5] || '') : (r[4] || '')).toString().trim();
+  const department = (isSevenCol ? (r[6] || '') : (r[5] || '')).toString().trim();
+
+  if (rollNo && !isNaN(Number(rollNo))) {
+    const num = Number(rollNo);
+    if (Number.isInteger(num)) {
+      rollNo = String(num);
+    }
+  }
+
+  return {
+    isSevenCol: isSevenCol,
+    studentId: studentId,
+    regNo: regNo,
+    regNoUpper: regNo.toUpperCase(),
+    name: name,
+    classId: classId,
+    classNorm: classId.toLowerCase().replace(/\s+/g, ''),
+    rollNo: rollNo,
+    status: status,
+    department: department,
+    regCol: isSevenCol ? 2 : 1,
+    nameCol: isSevenCol ? 3 : 2,
+    classCol: isSevenCol ? 4 : 3,
+    rollCol: isSevenCol ? 5 : 4,
+    statusCol: isSevenCol ? 6 : 5,
+    deptCol: isSevenCol ? 7 : 6
+  };
+}
+
+/**
+ * Returns the set of canonical student RegNos explicitly removed or renamed by Admin/Faculty,
+ * preventing autoHealCanonicalRosters from resurrecting intentionally removed students.
+ * @returns {Set<string>}
+ */
+function getRemovedCanonicalSet() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('REMOVED_CANONICAL_REGS');
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.map(r => String(r).toUpperCase().trim()).filter(Boolean) : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+/**
+ * Marks a register number as intentionally removed/renamed so canonical healing does not re-add it.
+ * @param {string} regNo
+ */
+function markCanonicalStudentRemoved(regNo) {
+  const clean = (regNo || '').toString().trim().toUpperCase();
+  if (!clean) return;
+  try {
+    const set = getRemovedCanonicalSet();
+    set.add(clean);
+    PropertiesService.getScriptProperties().setProperty('REMOVED_CANONICAL_REGS', JSON.stringify(Array.from(set)));
+  } catch (e) {
+    Logger.log("Warning saving REMOVED_CANONICAL_REGS: " + e);
+  }
+}
+
+/**
+ * Clears a register number from the removed list when restored or re-enrolled.
+ * @param {string} regNo
+ */
+function clearCanonicalStudentRemoved(regNo) {
+  const clean = (regNo || '').toString().trim().toUpperCase();
+  if (!clean) return;
+  try {
+    const set = getRemovedCanonicalSet();
+    if (set.delete(clean)) {
+      PropertiesService.getScriptProperties().setProperty('REMOVED_CANONICAL_REGS', JSON.stringify(Array.from(set)));
+    }
+  } catch (e) {
+    Logger.log("Warning updating REMOVED_CANONICAL_REGS: " + e);
+  }
+}
+
+/**
  * Automatically verifies and heals the canonical botany student roster.
- * Ensures all 85 students (from roll #1 to the end of each class) are present,
- * active, correctly mapped to their classId, and have their roll numbers set.
+ * Ensures missing students (not explicitly removed) have required fields set without overriding Inactive status.
  * Runs seamlessly in the background during getAppMetadata and getStudentsByClass.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
  */
@@ -562,36 +654,33 @@ function autoHealCanonicalRosters(ss) {
       const data = studentsSheet.getRange(2, 1, lastRow - 1, maxCols).getValues();
       for (let i = 0; i < data.length; i++) {
         const rowNum = i + 2;
-        const col0 = data[i][0] ? data[i][0].toString().trim() : '';
-        const isSevenCol = col0.startsWith('STU_');
-        const regNo = (isSevenCol ? (data[i][1] || '') : col0).toString().trim().toUpperCase();
-        const status = (isSevenCol ? (data[i][5] || '') : (data[i][4] || '')).toString().trim();
-        const rollNo = (isSevenCol ? (data[i][4] !== undefined && data[i][4] !== null ? data[i][4].toString().trim() : '') : (data[i][3] !== undefined && data[i][3] !== null ? data[i][3].toString().trim() : ''));
-        const sClassId = (isSevenCol ? (data[i][3] || '') : (data[i][2] || '')).toString().trim().toLowerCase().replace(/\s+/g, '');
-
-        if (regNo) {
-          regToRowMap.set(regNo, {
+        const parsed = parseStudentSheetRow(data[i]);
+        if (parsed.regNoUpper) {
+          regToRowMap.set(parsed.regNoUpper, {
             row: rowNum,
-            isSevenCol: isSevenCol,
-            status: status,
-            rollNo: rollNo,
-            classId: sClassId
+            isSevenCol: parsed.isSevenCol,
+            status: parsed.status,
+            rollNo: parsed.rollNo,
+            classId: parsed.classNorm
           });
         }
       }
     }
 
+    const removedSet = getRemovedCanonicalSet();
     const rowsToAppend = [];
     CANONICAL_ROSTER.forEach(c => {
       const regUpper = c.regNo.toUpperCase();
       if (!regToRowMap.has(regUpper)) {
-        // Missing canonical student - restore them!
-        const newStudentId = "STU_" + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
-        rowsToAppend.push([newStudentId, c.regNo, c.name, c.classId, c.rollNo, "Active", ""]);
+        // Only restore if NOT intentionally removed or renamed by Admin/Faculty
+        if (!removedSet.has(regUpper)) {
+          const newStudentId = "STU_" + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
+          rowsToAppend.push([newStudentId, c.regNo, c.name, c.classId, c.rollNo, "Active", ""]);
+        }
       } else {
         const existing = regToRowMap.get(regUpper);
-        // If inactive or status blank, heal to Active!
-        if (existing.status.toLowerCase() !== 'active') {
+        // Heal ONLY when status cell is blank; never re-activate explicitly Inactive students
+        if (!existing.status) {
           const statusCol = existing.isSevenCol ? 6 : 5;
           studentsSheet.getRange(existing.row, statusCol).setValue("Active");
         }
@@ -604,7 +693,6 @@ function autoHealCanonicalRosters(ss) {
         }
         // Ensure classId is present
         const existingClassNorm = (existing.classId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const targetClassNorm = c.classId.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!existingClassNorm) {
           const classCol = existing.isSevenCol ? 4 : 3;
           studentsSheet.getRange(existing.row, classCol).setValue(c.classId);
@@ -626,16 +714,17 @@ function autoHealCanonicalRosters(ss) {
  * Reactivates a previously removed/inactive student and restores them to the active roster.
  * @param {string} studentId
  * @param {string} classId
+ * @param {string} [authToken]
  * @returns {Object} { success: boolean, message: string }
  */
-function reactivateStudent(studentId, classId) {
-  const user = getCurrentUser();
+function reactivateStudent(studentId, classId, authToken) {
+  const user = getCurrentUser(authToken);
   if (!user.isAuthorized) {
     return { success: false, message: "Unauthorized access." };
   }
 
   studentId = (studentId || '').trim();
-  classId = (classId || '').trim();
+  const targetClassNorm = (classId || '').trim().toLowerCase().replace(/\s+/g, '');
   if (!studentId) return { success: false, message: "Student identifier required." };
 
   const ss = getSpreadsheet();
@@ -644,19 +733,15 @@ function reactivateStudent(studentId, classId) {
     return { success: false, message: "Students sheet is empty." };
   }
 
-  const data = studentsSheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    const sId = data[i][0] ? data[i][0].toString().trim() : '';
-    const rNo = data[i][1] ? data[i][1].toString().trim().toUpperCase() : '';
-    const sClass = data[i][3] ? data[i][3].toString().trim() : '';
-
-    if ((sId === studentId || rNo === studentId) && (!classId || sClass === classId)) {
-      const isSevenCol = sId.startsWith('STU_');
-      const statusCol = isSevenCol ? 6 : 5;
-      studentsSheet.getRange(i + 1, statusCol).setValue("Active");
+  const data = studentsSheet.getRange(2, 1, studentsSheet.getLastRow() - 1, Math.max(studentsSheet.getLastColumn(), 7)).getValues();
+  for (let i = 0; i < data.length; i++) {
+    const p = parseStudentSheetRow(data[i]);
+    if ((p.studentId === studentId || p.regNoUpper === studentId.toUpperCase()) && (!targetClassNorm || p.classNorm === targetClassNorm)) {
+      studentsSheet.getRange(i + 2, p.statusCol).setValue("Active");
+      clearCanonicalStudentRemoved(p.regNo);
       return {
         success: true,
-        message: 'Student "' + (data[i][2] || rNo) + '" (' + rNo + ') restored to Active class roster.'
+        message: 'Student "' + (p.name || p.regNo) + '" (' + p.regNo + ') restored to Active class roster.'
       };
     }
   }
@@ -859,6 +944,9 @@ function syncOfflineSessionsBatch(sessionsList, authToken) {
 
   sessionsList.forEach(sessionPayload => {
     try {
+      if (sessionPayload && !sessionPayload.authToken && !sessionPayload.token && authToken) {
+        sessionPayload.authToken = authToken;
+      }
       const res = recordAttendanceSession(sessionPayload);
       results.push({
         queueId: sessionPayload.queueId || '',
@@ -908,56 +996,29 @@ function getStudentsByClass(classId, includeInactive) {
   const maxCols = studentsSheet.getLastColumn();
   const data = studentsSheet.getRange(2, 1, studentsSheet.getLastRow() - 1, Math.max(maxCols, 7)).getValues();
   const students = [];
+  const inactiveRegSet = new Set();
   const targetClassNorm = (classId || '').toString().trim().toLowerCase().replace(/\s+/g, '');
 
   data.forEach(r => {
-    let studentId = '';
-    let regNo = '';
-    let name = '';
-    let sClassId = '';
-    let rollNo = '';
-    let status = 'Active';
-    let department = '';
-
-    if (r[0] && r[0].toString().startsWith('STU_')) {
-      // 7-column schema: [StudentId, RegNo, Name, ClassId, RollNo, Status, Department]
-      studentId = r[0].toString().trim();
-      regNo = r[1] ? r[1].toString().trim() : '';
-      name = r[2] ? r[2].toString().trim() : '';
-      sClassId = r[3] ? r[3].toString().trim() : '';
-      rollNo = r[4] !== undefined && r[4] !== null ? r[4].toString().trim() : '';
-      status = r[5] ? r[5].toString().trim() : 'Active';
-      department = r[6] ? r[6].toString().trim() : '';
-    } else {
-      // 5-column legacy schema: [RegNo, Name, ClassId, RollNo, Status]
-      regNo = r[0] ? r[0].toString().trim() : '';
-      studentId = 'STU_' + regNo.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      name = r[1] ? r[1].toString().trim() : '';
-      sClassId = r[2] ? r[2].toString().trim() : '';
-      rollNo = r[3] !== undefined && r[3] !== null ? r[3].toString().trim() : '';
-      status = r[4] ? r[4].toString().trim() : 'Active';
-      department = r[5] ? r[5].toString().trim() : '';
-    }
-
-    // Clean up float roll numbers (e.g. "1.0" -> "1")
-    if (rollNo && !isNaN(Number(rollNo))) {
-      const num = Number(rollNo);
-      if (Number.isInteger(num)) {
-        rollNo = String(num);
+    const p = parseStudentSheetRow(r);
+    const isActive = (p.status || 'Active').toLowerCase() === 'active';
+    if ((p.classNorm === targetClassNorm || !targetClassNorm) && p.regNo) {
+      if (!isActive) inactiveRegSet.add(p.regNoUpper);
+      if (isActive || includeInactive) {
+        students.push({
+          studentId: p.studentId,
+          regNo: p.regNo,
+          name: p.name,
+          rollNo: p.rollNo,
+          department: p.department,
+          status: p.status || 'Active',
+          isInactive: !isActive
+        });
       }
-    }
-
-    const sClassNorm = sClassId.toLowerCase().replace(/\s+/g, '');
-    const isActive = status.toLowerCase() === 'active';
-    if ((sClassNorm === targetClassNorm || !targetClassNorm) && regNo && (isActive || includeInactive)) {
-      students.push({ studentId, regNo, name, rollNo, department, status, isInactive: !isActive });
     }
   });
 
-  // Bulletproof In-Memory Canonical Roster Guarantee:
-  // For canonical Botany classes (fyug_s2, fyug_s4, fyug_s6), ensure all canonical students
-  // (especially Roll #1 and every student) are ALWAYS present, active, and correctly numbered.
-  // Supports all alias variations: FYUG_S6, S6 FYUGP, fyug_s6, s6, etc.
+  // In-Memory Canonical Roster Guarantee (excluding intentionally removed or Inactive students):
   const resolveCanonicalClass = cid => {
     const norm = (cid || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     if (norm.includes('s2') || norm === '2') return 'fyug_s2';
@@ -968,12 +1029,16 @@ function getStudentsByClass(classId, includeInactive) {
 
   const canonicalTarget = resolveCanonicalClass(targetClassNorm);
   if (canonicalTarget) {
+    const removedSet = getRemovedCanonicalSet();
     const canonicalForClass = CANONICAL_ROSTER.filter(c => resolveCanonicalClass(c.classId) === canonicalTarget);
     canonicalForClass.forEach(c => {
-      const existing = students.find(s => s.regNo.toUpperCase() === c.regNo.toUpperCase());
+      const regUpper = c.regNo.toUpperCase();
+      if (removedSet.has(regUpper) || inactiveRegSet.has(regUpper)) return;
+
+      const existing = students.find(s => s.regNo.toUpperCase() === regUpper);
       if (!existing) {
         students.push({
-          studentId: 'STU_' + c.regNo.toUpperCase(),
+          studentId: 'STU_' + regUpper,
           regNo: c.regNo,
           name: c.name,
           rollNo: c.rollNo,
@@ -981,10 +1046,8 @@ function getStudentsByClass(classId, includeInactive) {
           status: 'Active',
           isInactive: false
         });
-      } else {
-        existing.status = 'Active';
-        existing.isInactive = false;
-        if (!existing.rollNo) existing.rollNo = c.rollNo;
+      } else if (!existing.rollNo) {
+        existing.rollNo = c.rollNo;
       }
     });
   }
@@ -1354,8 +1417,8 @@ function getSessionForEditing(classId, dateString, period, authToken) {
  * @param {Array<Object>} studentsList [{ regNo, name, rollNo }]
  * @returns {Object} { success: boolean, message: string, count: number }
  */
-function importClassRoster(className, studentsList) {
-  const user = getCurrentUser();
+function importClassRoster(className, studentsList, authToken) {
+  const user = getCurrentUser(authToken);
   if (!user.isAuthorized) {
     return { success: false, message: "Unauthorized: Please sign in with an authorized Google account." };
   }
@@ -1423,6 +1486,7 @@ function importClassRoster(className, studentsList) {
     const department = (s.department || s.homeDepartment || s.homeDept || '').toString().trim();
 
     if (regNo && name) {
+      clearCanonicalStudentRemoved(regNo);
       if (studentKeyToRowMap.has(regNo)) {
         // Existing student: preserve their permanent StudentId, update RegNo/Name/Class/RollNo/Department
         const rowIdx = studentKeyToRowMap.get(regNo);
@@ -1484,14 +1548,14 @@ function importClassRoster(className, studentsList) {
  * @param {string} newDepartment (Optional: Home Department for Minor / MDC students)
  * @returns {Object} { success: boolean, message: string, student: Object }
  */
-function updateStudentDetails(studentId, newRegNo, newName, newRollNo, newDepartment) {
-  const user = getCurrentUser();
+function updateStudentDetails(studentId, newRegNo, newName, newRollNo, newDepartment, authToken) {
+  const user = getCurrentUser(authToken);
   if (!user.isAuthorized) {
     return { success: false, message: "Unauthorized: Please sign in with an authorized Google account." };
   }
 
   studentId = (studentId || '').trim();
-  newRegNo = (newRegNo || '').trim();
+  newRegNo = (newRegNo || '').trim().toUpperCase();
   newName = (newName || '').trim();
   newRollNo = (newRollNo || '').trim();
   newDepartment = (newDepartment || '').trim();
@@ -1504,19 +1568,25 @@ function updateStudentDetails(studentId, newRegNo, newName, newRollNo, newDepart
   const studentsSheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!studentsSheet || studentsSheet.getLastRow() < 2) return { success: false, message: "Students sheet empty." };
 
-  const data = studentsSheet.getDataRange().getValues();
+  const data = studentsSheet.getRange(2, 1, studentsSheet.getLastRow() - 1, Math.max(studentsSheet.getLastColumn(), 7)).getValues();
   let found = false;
   let oldRegNo = '';
 
-  for (let i = 1; i < data.length; i++) {
-    const sId = data[i][0] ? data[i][0].toString().trim() : '';
-    const regNo = data[i][1] ? data[i][1].toString().trim() : '';
-    if (sId === studentId || regNo === studentId) {
-      oldRegNo = regNo;
-      studentsSheet.getRange(i + 1, 2).setValue(newRegNo);
-      studentsSheet.getRange(i + 1, 3).setValue(newName);
-      studentsSheet.getRange(i + 1, 5).setValue(newRollNo);
-      studentsSheet.getRange(i + 1, 7).setValue(newDepartment);
+  for (let i = 0; i < data.length; i++) {
+    const p = parseStudentSheetRow(data[i]);
+    if (p.studentId === studentId || p.regNoUpper === studentId.toUpperCase()) {
+      oldRegNo = p.regNo;
+      const rowNum = i + 2;
+      studentsSheet.getRange(rowNum, p.regCol).setValue(newRegNo);
+      studentsSheet.getRange(rowNum, p.nameCol).setValue(newName);
+      studentsSheet.getRange(rowNum, p.rollCol).setValue(newRollNo);
+      if (p.isSevenCol) {
+        studentsSheet.getRange(rowNum, p.deptCol).setValue(newDepartment);
+      }
+      if (oldRegNo && oldRegNo.toUpperCase() !== newRegNo.toUpperCase()) {
+        markCanonicalStudentRemoved(oldRegNo);
+      }
+      clearCanonicalStudentRemoved(newRegNo);
       found = true;
       break;
     }
@@ -1566,8 +1636,8 @@ function updateStudentDetails(studentId, newRegNo, newName, newRollNo, newDepart
  * @param {string} department (Optional: Home Department for Minor / MDC students)
  * @returns {Object} { success: boolean, message: string, student: Object }
  */
-function addNewStudent(classId, regNo, name, rollNo, department) {
-  const user = getCurrentUser();
+function addNewStudent(classId, regNo, name, rollNo, department, authToken) {
+  const user = getCurrentUser(authToken);
   if (!user.isAuthorized) {
     return { success: false, message: "Unauthorized: Please sign in with an authorized Google account." };
   }
@@ -1588,27 +1658,32 @@ function addNewStudent(classId, regNo, name, rollNo, department) {
     return { success: false, message: "Students sheet not found." };
   }
 
-  // Check if student with same regNo already exists in this class
-  const data = studentsSheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    const rNo = data[i][1] ? data[i][1].toString().trim().toUpperCase() : '';
-    const sClass = data[i][3] ? data[i][3].toString().trim() : '';
-    const status = data[i][5] ? data[i][5].toString().trim().toLowerCase() : '';
+  clearCanonicalStudentRemoved(regNo);
+  const targetClassNorm = classId.toLowerCase().replace(/\s+/g, '');
 
-    if (rNo === regNo && sClass === classId) {
-      if (status === 'active') {
-        return { success: false, message: `Student with Register Number "${regNo}" is already enrolled in this class.` };
-      } else {
-        // Reactivate student
-        studentsSheet.getRange(i + 1, 3).setValue(name);
-        studentsSheet.getRange(i + 1, 5).setValue(rollNo);
-        studentsSheet.getRange(i + 1, 6).setValue("Active");
-        studentsSheet.getRange(i + 1, 7).setValue(department);
-        return {
-          success: true,
-          message: `Student "${name}" (${regNo}) was reactivated in this class roster.`,
-          student: { studentId: data[i][0], regNo, name, rollNo, department }
-        };
+  // Check if student with same regNo already exists in this class
+  if (studentsSheet.getLastRow() >= 2) {
+    const data = studentsSheet.getRange(2, 1, studentsSheet.getLastRow() - 1, Math.max(studentsSheet.getLastColumn(), 7)).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const p = parseStudentSheetRow(data[i]);
+      if (p.regNoUpper === regNo && p.classNorm === targetClassNorm) {
+        if ((p.status || 'Active').toLowerCase() === 'active') {
+          return { success: false, message: `Student with Register Number "${regNo}" is already enrolled in this class.` };
+        } else {
+          // Reactivate student
+          const rowNum = i + 2;
+          studentsSheet.getRange(rowNum, p.nameCol).setValue(name);
+          studentsSheet.getRange(rowNum, p.rollCol).setValue(rollNo);
+          studentsSheet.getRange(rowNum, p.statusCol).setValue("Active");
+          if (p.isSevenCol) {
+            studentsSheet.getRange(rowNum, p.deptCol).setValue(department);
+          }
+          return {
+            success: true,
+            message: `Student "${name}" (${regNo}) was reactivated in this class roster.`,
+            student: { studentId: p.studentId, regNo, name, rollNo, department }
+          };
+        }
       }
     }
   }
@@ -1639,14 +1714,15 @@ function addNewStudent(classId, regNo, name, rollNo, department) {
  * @param {string} classId
  * @returns {Object} { success: boolean, message: string }
  */
-function removeStudent(studentId, classId) {
-  const user = getCurrentUser();
+function removeStudent(studentId, classId, authToken) {
+  const user = getCurrentUser(authToken);
   if (!user.isAuthorized) {
     return { success: false, message: "Unauthorized: Please sign in with an authorized Google account." };
   }
 
   studentId = (studentId || '').trim();
   classId = (classId || '').trim();
+  const targetClassNorm = classId.toLowerCase().replace(/\s+/g, '');
 
   if (!studentId) {
     return { success: false, message: "Student identifier is required." };
@@ -1658,20 +1734,19 @@ function removeStudent(studentId, classId) {
     return { success: false, message: "Students sheet is empty." };
   }
 
-  const data = studentsSheet.getDataRange().getValues();
+  const data = studentsSheet.getRange(2, 1, studentsSheet.getLastRow() - 1, Math.max(studentsSheet.getLastColumn(), 7)).getValues();
   let foundRow = -1;
+  let foundStatusCol = 6;
   let studentName = '';
   let regNo = '';
 
-  for (let i = 1; i < data.length; i++) {
-    const sId = data[i][0] ? data[i][0].toString().trim() : '';
-    const rNo = data[i][1] ? data[i][1].toString().trim() : '';
-    const sClass = data[i][3] ? data[i][3].toString().trim() : '';
-
-    if ((sId === studentId || rNo === studentId) && (!classId || sClass === classId)) {
-      foundRow = i + 1;
-      regNo = rNo;
-      studentName = data[i][2] || rNo;
+  for (let i = 0; i < data.length; i++) {
+    const p = parseStudentSheetRow(data[i]);
+    if ((p.studentId === studentId || p.regNoUpper === studentId.toUpperCase()) && (!targetClassNorm || p.classNorm === targetClassNorm)) {
+      foundRow = i + 2;
+      foundStatusCol = p.statusCol;
+      regNo = p.regNo;
+      studentName = p.name || p.regNo;
       break;
     }
   }
@@ -1687,8 +1762,8 @@ function removeStudent(studentId, classId) {
     const rData = recordsSheet.getRange(2, 3, recordsSheet.getLastRow() - 1, 2).getValues();
     for (let j = 0; j < rData.length; j++) {
       const recStuId = rData[j][0] ? rData[j][0].toString().trim() : '';
-      const recRegNo = rData[j][1] ? rData[j][1].toString().trim() : '';
-      if (recStuId === studentId || recRegNo === regNo) {
+      const recRegNo = rData[j][1] ? rData[j][1].toString().trim().toUpperCase() : '';
+      if (recStuId === studentId || recRegNo === regNo.toUpperCase()) {
         hasRecords = true;
         break;
       }
@@ -1703,8 +1778,8 @@ function removeStudent(studentId, classId) {
       const lastCol = logSheet.getLastColumn();
       const lData = logSheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
       for (let r = 0; r < lData.length; r++) {
-        const lReg = lData[r][0] ? lData[r][0].toString().trim() : '';
-        if (lReg === regNo) {
+        const lReg = lData[r][0] ? lData[r][0].toString().trim().toUpperCase() : '';
+        if (lReg === regNo.toUpperCase()) {
           for (let c = 4; c < lastCol; c++) {
             const mark = lData[r][c] ? lData[r][c].toString().trim() : '';
             if (mark === 'P' || mark === 'A' || mark === 'L') {
@@ -1718,9 +1793,12 @@ function removeStudent(studentId, classId) {
     }
   }
 
+  // Always record removal so auto-healer never restores removed student back into active class
+  markCanonicalStudentRemoved(regNo);
+
   if (hasRecords) {
     // Soft-deactivate so past attendance reports and session records remain 100% frozen, auditable, and intact
-    studentsSheet.getRange(foundRow, 6).setValue("Inactive");
+    studentsSheet.getRange(foundRow, foundStatusCol).setValue("Inactive");
     return {
       success: true,
       message: `Student "${studentName}" (${regNo}) has recorded attendance on file and was marked Inactive (removed from active class roster). Historical attendance records remain safely preserved.`
@@ -1972,7 +2050,7 @@ function downloadRegisterPdf(filter, authToken) {
     return { success: false, message: "Unauthorized access." };
   }
 
-  const reportData = getAttendanceReport(filter || {});
+  const reportData = getAttendanceReport(filter || {}, authToken);
   if (!reportData.success) {
     return reportData;
   }
@@ -2522,8 +2600,9 @@ function clearClassAttendanceData(classId, purgeMode, authToken) {
         const sData = studentsSheet.getDataRange().getValues();
         const sRowsToDelete = [];
         for (let i = sData.length - 1; i >= 1; i--) {
-          const sClass = sData[i][3] ? sData[i][3].toString().trim() : '';
-          if (sClass === classId) {
+          const parsed = parseStudentSheetRow(sData[i]);
+          if (parsed.classId === classId || parsed.classNorm === classId.toLowerCase().replace(/\s+/g, '')) {
+            if (parsed.regNoUpper) markCanonicalStudentRemoved(parsed.regNoUpper);
             sRowsToDelete.push(i + 1);
           }
         }
@@ -3069,8 +3148,8 @@ function syncSessionToColumnarLog(ss, sessionInfo) {
  * @param {Array<Object>} updatedStudentsList [{ studentKey, regNo, name, rollNo, department, oldRegNo }]
  * @returns {Object} { success: boolean, message: string, updatedCount: number }
  */
-function bulkUpdateStudentRoster(classId, updatedStudentsList) {
-  const user = getCurrentUser();
+function bulkUpdateStudentRoster(classId, updatedStudentsList, authToken) {
+  const user = getCurrentUser(authToken);
   if (!user.isAuthorized) {
     return { success: false, message: "Unauthorized access." };
   }
@@ -3140,7 +3219,9 @@ function bulkUpdateStudentRoster(classId, updatedStudentsList) {
         const prevRegNo = sData[targetRow - 1][1] ? sData[targetRow - 1][1].toString().trim().toUpperCase() : '';
         if (prevRegNo && prevRegNo !== newRegNo) {
           regNoChanges.push({ oldRegNo: prevRegNo, newRegNo, studentId: actualStudentId });
+          markCanonicalStudentRemoved(prevRegNo);
         }
+        clearCanonicalStudentRemoved(newRegNo);
 
         // Note: Column 1 (StudentId) is PRESERVED and NEVER modified!
         studentsSheet.getRange(targetRow, 2).setValue(newRegNo);
